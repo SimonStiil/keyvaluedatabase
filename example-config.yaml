@@ -1,0 +1,22 @@
+users:
+- username: user # Username
+  password: "XohImNooBHFR0OVvjcYpJ3NgPQ1qq73WKhHvch0VQtg=" # Hashed password from ./kvdb -generate=password
+  read: true # User has Read Permission
+  write: true # User has Write Permission
+  list: true # User has List Permission
+trustedProxies: # List of hosts that are trusted reading HostHeadders for. If request not from list only ip origin will be used
+- 172.17.0.1
+hosts:
+- address: "::1" # IPv6 of host that is allowed this access
+  read: true # Host has Read Permission
+  write: true # Host has Write Permission
+- address: "127.0.0.1" # IPv4 of host that is allowed this access
+  read: true # Host has Read Permission
+  write: true # Host has Write Permission
+  list: true # Host has List Permission
+redis:
+  address: "127.0.0.1:6379"
+  # envVariableName: # Set if different from KVDB_REDIS_PASSWORD
+prometheus:
+  enabled: true # enable /system/metrics prometheus endpoint (for all users and hosts)
+  # endpoint: # Set if different from metrics
