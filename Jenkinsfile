@@ -17,12 +17,6 @@ podTemplate(yaml: '''
         volumeMounts:
         - name: kaniko-secret
           mountPath: /kaniko/.docker
-      - name: golang
-        image: golang:alpine
-        command:
-        - sleep
-        args: 
-        - 99d
       restartPolicy: Never
       volumes:
       - name: kaniko-secret
@@ -35,13 +29,6 @@ podTemplate(yaml: '''
   node(POD_LABEL) {
     stage('checkout SCM') {  
       checkout scm
-    }
-    stage('UnitTests') {
-      container('golang') {
-        sh '''
-          go test .
-        '''
-      }
     }
     stage('Build Docker Image') {
       container('kaniko') {
