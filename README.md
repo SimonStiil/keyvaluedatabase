@@ -2,10 +2,15 @@
 This tool is a Key Value database usable as a webhook server.  
 Originally build as "Secrets" storage for External Secrets in Kubernetes.  
 
+# Download
+Docker image can be fetched from [dockerhub simonstiil/kbdv](https://hub.docker.com/repository/docker/simonstiil/kbdv)  
+Can be build with go build .  
+Will also be available as a release in releases in the future
 
 ## Configuration
 Is done in config.yaml following the structure  
 Example can be seen in [example-config.yaml](./example-config.yaml) 
+
 ## Command line options
 | Option | Description |
 | ------ | ----------- |
@@ -14,7 +19,6 @@ Example can be seen in [example-config.yaml](./example-config.yaml)
 | -test=\[output\] | Used with -generate=\[value\] to see if a the generated password matches a the password in \[output\] |
 | -config=\[value\] | Use an alternate config filename then config.yaml (only yaml format supported) |
 | -port=\[value\] | Use a port different from 8080 |
-
 
 ## Environmental Options
 
