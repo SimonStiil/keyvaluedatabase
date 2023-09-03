@@ -55,7 +55,7 @@ podTemplate(yaml: '''
     stage('Build Docker Image') {
       container('kaniko') {
         sh '''
-          /kaniko/executor --force --context `pwd` --destination docker.io/simonstiil/kbdv:$BRANCH_NAME
+          /kaniko/executor --force --context `pwd` --log-format text --destination docker.io/simonstiil/kbdv:$BRANCH_NAME
         '''
       }
     }
