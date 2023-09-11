@@ -67,6 +67,7 @@ func (App *Application) GreetingController(w http.ResponseWriter, r *http.Reques
 	requests.WithLabelValues(r.URL.EscapedPath(), r.Method).Inc()
 	//https://stackoverflow.com/questions/64437991/prevent-http-handlefunc-funcw-r-handler-being-called-for-all-unmatc
 	if !(r.URL.Path == "/system/greeting") {
+		log.Printf("%v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 404)
 		http.NotFoundHandler().ServeHTTP(w, r)
 		return
 	}
@@ -77,6 +78,7 @@ func (App *Application) GreetingController(w http.ResponseWriter, r *http.Reques
 		name = val[0]
 	}
 	reply := Greeting{App.Count.GetCount(), "Hello, " + name}
+	log.Printf("%v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 200)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(reply)
 	return
@@ -96,6 +98,7 @@ func (App *Application) RootController(w http.ResponseWriter, r *http.Request) {
 		log.Printf("%d RootController %v %v %v\n", id, method, key, slashes)
 	}
 	if len(slashSeperated) > 1 {
+		log.Printf("%v %v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 404, "ToManySlashes")
 		http.NotFoundHandler().ServeHTTP(w, r)
 		return
 	}
@@ -124,6 +127,7 @@ func (App *Application) RootController(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		reply := KVPair{Key: key, Value: value}
+		log.Printf("%v %v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 200, data.Key)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(reply)
 		return
@@ -148,6 +152,7 @@ func (App *Application) RootController(w http.ResponseWriter, r *http.Request) {
 			http.NotFoundHandler().ServeHTTP(w, r)
 			return
 		}
+		log.Printf("%v %v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 201, data.Key)
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusCreated)
 		w.Write([]byte("OK"))
@@ -177,6 +182,7 @@ func (App *Application) RootController(w http.ResponseWriter, r *http.Request) {
 		_, exists := App.DB.Get(data.Key)
 		if data.Type == "roll" && exists {
 			App.DB.Set(data.Key, newData.Value)
+			log.Printf("%v %v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 200, data.Key)
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(newData)
 
@@ -187,6 +193,7 @@ func (App *Application) RootController(w http.ResponseWriter, r *http.Request) {
 		}
 		if data.Type == "generate" && !exists {
 			App.DB.Set(data.Key, newData.Value)
+			log.Printf("%v %v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 200, data.Key)
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(newData)
 			if debug {
@@ -207,6 +214,7 @@ func (App *Application) RootController(w http.ResponseWriter, r *http.Request) {
 			log.Printf("%d %v key: %v Value: %v\n", id, method, data.Key, data.Value)
 		}
 		App.DB.Delete(data.Key)
+		log.Printf("%v %v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 201, data.Key)
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusCreated)
 		w.Write([]byte("OK"))
@@ -274,6 +282,7 @@ func (App *Application) ListController(w http.ResponseWriter, r *http.Request) {
 	requests.WithLabelValues(r.URL.EscapedPath(), r.Method).Inc()
 	//https://stackoverflow.com/questions/64437991/prevent-http-handlefunc-funcw-r-handler-being-called-for-all-unmatc
 	if !(r.URL.Path == "/system/list") {
+		log.Printf("%v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 404)
 		http.NotFoundHandler().ServeHTTP(w, r)
 		return
 	}
@@ -282,6 +291,7 @@ func (App *Application) ListController(w http.ResponseWriter, r *http.Request) {
 		log.Printf("%d ListController\n", id)
 	}
 	content := App.DB.Keys()
+	log.Printf("%v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 200)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(content)
 	return
@@ -294,6 +304,7 @@ type Health struct {
 
 func (App *Application) BadRequestHandler() http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("%v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 400)
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("400 Bad Request"))
@@ -309,7 +320,6 @@ func (App *Application) HealthActuator(w http.ResponseWriter, r *http.Request) {
 		http.NotFoundHandler().ServeHTTP(w, r)
 		return
 	}
-	log.Println("Health-check")
 	reply := Health{Status: "UP", Requests: int(App.Count.PeakCount())}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(reply)
@@ -350,13 +360,16 @@ func (App *Application) BasicAuth(next http.HandlerFunc, permission *ConfigPermi
 				passwordHash := AuthHash(password)
 				if AuthTest(passwordHash, user.PasswordEnc) {
 					if AuthTestPermission(user.Permissions, *permission) {
+						r.Header.Set("secret_remote_username", username)
 						next.ServeHTTP(w, r)
 						return
 					}
 				}
 			}
+		} else {
+			username = "-"
 		}
-		log.Println("Basic Auth Failed")
+		log.Printf("%v %v %v %v %v %v", r.Header.Get("secret_remote_address"), username, r.Method, r.URL.Path, 401, "BasicAuthCheckFailed")
 		w.Header().Set("WWW-Authenticate", `Basic realm="restricted", charset="UTF-8"`)
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 	})
@@ -419,6 +432,7 @@ func (App *Application) HostBlocker(next http.HandlerFunc, permission *ConfigPer
 			if host.Address == address {
 				found = true
 				if AuthTestPermission(host.Permissions, *permission) {
+					r.Header.Set("secret_remote_address", address)
 					next.ServeHTTP(w, r)
 					return
 				} else {
@@ -431,7 +445,7 @@ func (App *Application) HostBlocker(next http.HandlerFunc, permission *ConfigPer
 		if !found && debug {
 			log.Println("HostBlocker - ", foundHeadderName, " - Lookup Host failed for ", address)
 		}
-		log.Println("Host Blocker Failed")
+		log.Printf("%v %v %v %v %v %v", address, "-", r.Method, r.URL.Path, 401, "HostCheckFailed")
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 	})
 }
@@ -473,10 +487,11 @@ func main() {
 		"REMOTE_ADDR"}
 
 	if App.Config.Redis.Address == "" {
-		log.Printf("%v_REDIS_HOS using yaml db\n", BaseENVname)
+		log.Printf("Using Yaml DB. (%v_REDIS_HOST missing)\n", BaseENVname)
 		App.DB = new(YamlDatabase)
 		App.DB.Init("", "")
 	} else {
+		log.Printf("Using Redis DB\n")
 		App.DB = new(RedisDatabase)
 		App.DB.Init(App.Config.Redis.Address, App.Config.Redis.Password)
 	}
@@ -491,11 +506,9 @@ func main() {
 		if App.Config.Prometheus.Endpoint != "" {
 			endpoint = App.Config.Prometheus.Endpoint
 		}
-
+		log.Printf("Metrics enabled at %v\n", endpoint)
 		http.Handle(endpoint, promhttp.Handler())
 	}
-	// ReadPermission := &ConfigPermissions{Read: true}
-	// WritePermission := &ConfigPermissions{Read: true}
 	ListPermission := &ConfigPermissions{List: true}
 	http.HandleFunc("/system/greeting", App.HostBlocker(App.BasicAuth(App.Handlers.GreetingController, nil), nil))
 	http.HandleFunc("/", App.HostBlocker(App.BasicAuth(App.Handlers.RootController, nil), nil))

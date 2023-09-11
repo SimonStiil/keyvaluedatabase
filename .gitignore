@@ -17,3 +17,4 @@ testdb.yaml
 db.yaml
 config.yaml
 config-noauth.yaml
+add-secrets/
