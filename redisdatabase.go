@@ -11,22 +11,24 @@ type RedisDatabase struct {
 	Initialized bool
 	CTX         context.Context
 	RDC         *redis.Client
+	Host        string
+	Password    string
 }
 
-func (db *RedisDatabase) Init(host string, password string) {
+func (DB *RedisDatabase) Init() {
 	if debug {
 		log.Println("db.init (redis)")
 	}
-	db.CTX = context.Background()
-	db.RDC = redis.NewClient(&redis.Options{
-		Addr:     host,
-		Password: password, // no password set
-		DB:       1,        // use default DB
+	DB.CTX = context.Background()
+	DB.RDC = redis.NewClient(&redis.Options{
+		Addr:     DB.Host,
+		Password: DB.Password, // no password set
+		DB:       1,           // use default DB
 	})
 	if debug {
 		log.Println("db.init - complete")
 	}
-	db.Initialized = true
+	DB.Initialized = true
 }
 
 func (DB *RedisDatabase) Set(key string, value interface{}) {

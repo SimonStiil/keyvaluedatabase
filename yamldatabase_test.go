@@ -13,14 +13,14 @@ type DBTest struct {
 
 func Test_Yaml_DB(t *testing.T) {
 	dbt := new(DBTest)
-	dbt.DB = new(YamlDatabase)
 	dbt.FileName = "testdb.yaml"
+	dbt.DB = &YamlDatabase{DatabaseName: dbt.FileName}
 	t.Run("initialize fresh db", func(t *testing.T) {
 		err := os.Remove(dbt.FileName)
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			t.Fatal(err)
 		}
-		dbt.DB.Init(dbt.FileName, "")
+		dbt.DB.Init()
 	})
 	testKey := "test"
 	testValue := "value"
@@ -53,7 +53,7 @@ func Test_Yaml_DB(t *testing.T) {
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			t.Fatal(err)
 		}
-		dbt.DB.Init(dbt.FileName, "")
+		dbt.DB.Init()
 		count.Init(dbt.DB)
 		val := count.GetCount()
 		if val != 0 {
@@ -64,7 +64,7 @@ func Test_Yaml_DB(t *testing.T) {
 			t.Errorf("Counter expected value to be 1, got %v", val)
 		}
 		dbt.DB.Close()
-		dbt.DB.Init(dbt.FileName, "")
+		dbt.DB.Init()
 		val = count.GetCount()
 		if val != 2 {
 			t.Errorf("Fresh Counter expected value to be 2, got %v", val)
@@ -80,7 +80,7 @@ func Test_Yaml_DB(t *testing.T) {
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			t.Fatal(err)
 		}
-		dbt.DB.Init(dbt.FileName, "")
+		dbt.DB.Init()
 		count.Init(dbt.DB)
 		val := count.GetCount()
 		if val != 0 {
@@ -95,7 +95,7 @@ func Test_Yaml_DB(t *testing.T) {
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			t.Fatal(err)
 		}
-		dbt.DB.Init(dbt.FileName, "")
+		dbt.DB.Init()
 		count.Init(dbt.DB)
 		val = count.GetCount()
 		if val != 0 {

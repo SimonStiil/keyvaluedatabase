@@ -24,6 +24,14 @@ type ConfigRedis struct {
 	VariableName string `yaml:"envVariableName,omitempty"`
 	Password     string `yaml:"-"`
 }
+type ConfigMysql struct {
+	Address      string `yaml:"address,omitempty"`
+	Username     string `yaml:"username,omitempty"`
+	DatabaseName string `yaml:"databaseName,omitempty"`
+	TableName    string `yaml:"tableName,omitempty"`
+	VariableName string `yaml:"envVariableName,omitempty"`
+	Password     string `yaml:"-"`
+}
 type ConfigPrometheus struct {
 	Enabled  bool   `yaml:"enabled,omitempty"`
 	Endpoint string `yaml:"endpoint,omitempty"`
@@ -40,6 +48,7 @@ type Config struct {
 	Hosts          []ConfigHosts    `yaml:"hosts,omitempty"`
 	TrustedProxies []string         `yaml:"trustedProxies,omitempty"`
 	Redis          ConfigRedis      `yaml:"redis,omitempty"`
+	Mysql          ConfigMysql      `yaml:"mysql,omitempty"`
 	Prometheus     ConfigPrometheus `yaml:"prometheus,omitempty"`
 }
 
@@ -96,6 +105,13 @@ func ConfigRead(Filename string) Config {
 			document.Redis.Password = os.Getenv(document.Redis.VariableName)
 		} else {
 			document.Redis.Password = os.Getenv(BaseENVname + "_REDIS_PASSWORD")
+		}
+	}
+	if document.Mysql.Address != "" {
+		if document.Mysql.VariableName != "" {
+			document.Mysql.Password = os.Getenv(document.Mysql.VariableName)
+		} else {
+			document.Mysql.Password = os.Getenv(BaseENVname + "_MYSQL_PASSWORD")
 		}
 	}
 	return document

@@ -26,7 +26,8 @@ Example can be seen in [example-config.yaml](./example-config.yaml)
 | ------ | ----------- |
 | KVDB_DEBUG | Enable debugging output (developer focused) |
 | KVDB_REDIS_HOST | Hostname for a redis database in format 127.0.0.1:6379 |
-| KVDB_REDIS_PASSWORD | Password for a redis database |
+| KVDB_REDIS_PASSWORD | Password for Redis database backend |
+| KVDB_MYSQL_PASSWORD | Password for MySQL database backend |
 | KVDB_AUTH_USERNAME | Additional user from ENV with all rigts |
 | KVDB_AUTH_PASSWORD | Password for user from ENV with all rigts |
 

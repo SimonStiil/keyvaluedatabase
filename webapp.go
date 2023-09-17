@@ -486,14 +486,27 @@ func main() {
 		"WL-Proxy-Client-IP",
 		"REMOTE_ADDR"}
 
-	if App.Config.Redis.Address == "" {
-		log.Printf("Using Yaml DB. (%v_REDIS_HOST missing)\n", BaseENVname)
-		App.DB = new(YamlDatabase)
-		App.DB.Init("", "")
-	} else {
+	if App.Config.Redis.Address != "" {
+
 		log.Printf("Using Redis DB\n")
-		App.DB = new(RedisDatabase)
-		App.DB.Init(App.Config.Redis.Address, App.Config.Redis.Password)
+		App.DB = &RedisDatabase{Host: App.Config.Redis.Address, Password: App.Config.Redis.Password}
+		App.DB.Init()
+	} else {
+		if App.Config.Mysql.Address != "" {
+			log.Printf("Using Maria DB\n")
+			App.DB = &MariaDatabase{
+				DatabaseName: App.Config.Mysql.DatabaseName,
+				TableName:    App.Config.Mysql.TableName,
+				Host:         App.Config.Mysql.Address,
+				User:         App.Config.Mysql.Username,
+				Password:     App.Config.Mysql.Password,
+			}
+			App.DB.Init()
+		} else {
+			log.Print("Using Yaml DB. (no Redis or Mysql configuration)\n")
+			App.DB = &YamlDatabase{}
+			App.DB.Init()
+		}
 	}
 	App.Count.Init(App.DB)
 	defer App.DB.Close()
