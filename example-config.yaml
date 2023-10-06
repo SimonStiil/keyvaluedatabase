@@ -16,6 +16,7 @@ hosts:
     write: true # Host has Write Permission
     list: true # Host has List Permission
 - address: "127.0.0.1" # IPv4 of host that is allowed this access
+  permissions:
     read: true # Host has Read Permission
     write: true # Host has Write Permission
     list: true # Host has List Permission
