@@ -8,13 +8,14 @@ import (
 )
 
 type Counter struct {
-	Mutex sync.Mutex
-	Value uint32
-	DB    Database
+	Mutex  sync.Mutex
+	Value  uint32
+	Config *ConfigType
+	DB     Database
 }
 
 func (Count *Counter) Init(DB Database) {
-	if debug {
+	if Count.Config.Debug {
 		log.Println("count.Init")
 	}
 	Count.DB = DB
@@ -23,7 +24,7 @@ func (Count *Counter) Init(DB Database) {
 	if Count.DB != nil && Count.DB.IsInitialized() {
 		val, ok := Count.DB.Get("counter")
 		Count.Value = 0
-		if debug {
+		if Count.Config.Debug {
 			log.Println("count.Init get - ", val, " type: ", reflect.TypeOf(val))
 		}
 		if ok {
@@ -36,7 +37,7 @@ func (Count *Counter) Init(DB Database) {
 	} else {
 		Count.Value = 0
 	}
-	if debug {
+	if Count.Config.Debug {
 		log.Println("count.Init - complete")
 	}
 }
@@ -48,7 +49,7 @@ func (Count *Counter) GetCount() uint32 {
 	if Count.DB != nil && Count.DB.IsInitialized() {
 		Count.DB.Set("counter", Count.Value)
 	} else {
-		if debug {
+		if Count.Config.Debug {
 			log.Println("getCount db.isInitialized not true")
 		}
 	}

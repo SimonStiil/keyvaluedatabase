@@ -26,7 +26,8 @@ func Test_Auth(t *testing.T) {
 	})
 	t.Run("Load / Test Example User", func(t *testing.T) {
 		Auth := new(Auth)
-		config := ConfigRead("example-config.yaml")
+		config := ConfigType{}
+		ConfigRead("example-config", &config)
 
 		Auth.Init(config)
 		ExampleUsername := "user"

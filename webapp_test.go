@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"golang.org/x/exp/slices"
@@ -16,16 +18,17 @@ import (
 var requestsCount int
 
 func TestGETGreeting(t *testing.T) {
-	debug = true
 	app := new(Application)
+	app.Config = ConfigType{Debug: true}
 	t.Run("Initialize DB for Tests", func(t *testing.T) {
-		app.DB = new(YamlDatabase)
 		fileName := "testdb.yaml"
 		err := os.Remove(fileName)
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			t.Fatal(err)
 		}
-		app.DB.Init(fileName, "")
+		app.DB = &YamlDatabase{DatabaseName: fileName, Config: &ConfigType{Debug: true}}
+		app.DB.Init()
+		app.Count = &Counter{Config: &ConfigType{Debug: true}}
 		app.Count.Init(app.DB)
 	})
 	t.Run("Greetings", func(t *testing.T) {
@@ -69,13 +72,77 @@ func TestGETGreeting(t *testing.T) {
 	})
 	okBody := "OK"
 	testData := KVPair{Key: "somekey", Value: "123"}
-	t.Run("PUT", func(t *testing.T) {
+	t.Run("POST(json)", func(t *testing.T) {
 		marshalled, err := json.Marshal(testData)
 		if err != nil {
 			t.Fatalf("impossible to marshall teacher: %s", err)
 		}
-		request, _ := http.NewRequest(http.MethodPut, "/", bytes.NewReader(marshalled))
+		request, _ := http.NewRequest(http.MethodPost, "/", bytes.NewReader(marshalled))
 		request.Header.Set("Content-Type", "application/json")
+		response := httptest.NewRecorder()
+
+		app.RootController(response, request)
+		b, err := io.ReadAll(response.Body)
+		if err != nil {
+			t.Errorf("Error Reading body %v", err)
+		}
+		//t.Logf("Body: %v, Status: %v", string(b), response.Code)
+		if response.Code != http.StatusCreated {
+			t.Errorf(".Code got %q, want %q", response.Code, http.StatusCreated)
+		}
+		if string(b) != okBody {
+			t.Errorf(".Body got %q, want %q", string(b), okBody)
+		}
+	})
+	t.Run("POST(www-form)", func(t *testing.T) {
+		request, _ := http.NewRequest(
+			http.MethodPost,
+			fmt.Sprintf("/%v", testData.Key),
+			strings.NewReader(
+				fmt.Sprintf("value=%v", testData.Value)))
+		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		response := httptest.NewRecorder()
+
+		app.RootController(response, request)
+		b, err := io.ReadAll(response.Body)
+		if err != nil {
+			t.Errorf("Error Reading body %v", err)
+		}
+		//t.Logf("Body: %v, Status: %v", string(b), response.Code)
+		if response.Code != http.StatusCreated {
+			t.Errorf(".Code got %q, want %q", response.Code, http.StatusCreated)
+		}
+		if string(b) != okBody {
+			t.Errorf(".Body got %q, want %q", string(b), okBody)
+		}
+	})
+	t.Run("POST(raw)", func(t *testing.T) {
+		request, _ := http.NewRequest(
+			http.MethodPost,
+			fmt.Sprintf("/%v", testData.Key),
+			strings.NewReader(testData.Value))
+		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		response := httptest.NewRecorder()
+
+		app.RootController(response, request)
+		b, err := io.ReadAll(response.Body)
+		if err != nil {
+			t.Errorf("Error Reading body %v", err)
+		}
+		//t.Logf("Body: %v, Status: %v", string(b), response.Code)
+		if response.Code != http.StatusCreated {
+			t.Errorf(".Code got %q, want %q", response.Code, http.StatusCreated)
+		}
+		if string(b) != okBody {
+			t.Errorf(".Body got %q, want %q", string(b), okBody)
+		}
+	})
+	t.Run("PUT(raw)", func(t *testing.T) {
+		request, _ := http.NewRequest(
+			http.MethodPut,
+			fmt.Sprintf("/%v", testData.Key),
+			strings.NewReader(testData.Value))
+		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		response := httptest.NewRecorder()
 
 		app.RootController(response, request)
