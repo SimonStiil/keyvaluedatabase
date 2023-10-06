@@ -17,19 +17,50 @@ Example can be seen in [example-config.yaml](./example-config.yaml)
 | -debug | Enable debugging output (developer focused) |
 | -generate=\[value\] | Returns base64 encoded and encrypted password for \[value\] |
 | -test=\[output\] | Used with -generate=\[value\] to see if a the generated password matches a the password in \[output\] |
-| -config=\[value\] | Use an alternate config filename then config.yaml (only yaml format supported) |
-| -port=\[value\] | Use a port different from 8080 |
+| -config=\[value\] | Use an alternate config filename then config.yaml (only write prefix as .yaml will be appended ) |
+
+## Configuration Structure
+
+| Option | Description ( Defaults ) |
+| ------ | ----------- |
+| debug | Enable debugging output (developer focused) |
+| databaseType | Type of backend Database (mysql), redis or yaml |
+| users | List of Users |
+| users.username | Username of user for login |
+| users.password | Password for user, get hash from -generate (see commandline options)  |
+| users.permissions | Permissions of user |
+| users.permissions.read | Has read permission if from valid host |
+| users.permissions.write | Has write permission if from valid host |
+| users.permissions.list | Has list permission if from valid host |
+| trustedProxies | List of proxy ipes to trust headders from |
+| hosts.address | Limit access by host, Least priviliges of host and user are used |
+| hosts.permissions | Permissions of host |
+| hosts.permissions.read | Has read permission if valid user |
+| hosts.permissions.write | Has write permission if valid user |
+| prometheus | Prometheus settings |
+| prometheus.enabled | Prometheus enabled (true) |
+| prometheus.endpoint | Prometheus endpoint (/system/metrics) |
+| redis | Redis settings |
+| redis.address | Host address of prometheus server with port (127.0.0.1:6379) |
+| redis.envVariableName | Environment value to use for redis password (KVDB_REDIS_PASSWORD) |
+| mysql | MySQL settings |
+| mysql.address | Host address of prometheus server with port (127.0.0.1:3306) |
+| mysql.username | Username to connect to mysql (kvdb) |
+| mysql.databaseName | database to connecto to (mysql.username) |
+| mysql.tableName | Table to use in database (kvdb) |
+| mysql.keyName | Column  to use for key (kvdb) |
+| mysql.valueName | Column  to use for value (kvdb) |
+| mysql.envVariableName | Environment value to use for redis password (KVDB_MYSQL_PASSWORD) |
 
 ## Environmental Options
 
+All configuration options can be set using Environment Values use uppercase and replace . with _ and append KVDB_ prefix.  
+Example:
 | Option | Description |
 | ------ | ----------- |
 | KVDB_DEBUG | Enable debugging output (developer focused) |
-| KVDB_REDIS_HOST | Hostname for a redis database in format 127.0.0.1:6379 |
+| KVDB_REDIS_ADDRESS | Hostname for a redis database in format 127.0.0.1:6379 |
 | KVDB_REDIS_PASSWORD | Password for Redis database backend |
-| KVDB_MYSQL_PASSWORD | Password for MySQL database backend |
-| KVDB_AUTH_USERNAME | Additional user from ENV with all rigts |
-| KVDB_AUTH_PASSWORD | Password for user from ENV with all rigts |
 
 ## Usage
 Get key hello from db  
@@ -39,21 +70,40 @@ curl localhost:8080/hello -u test:test
 {"key":"hello","value":"world"}
 ```
 
-Put key hello with value world to db.  
-Supports both PUT and POST.  
+Set key hello with value world to db.  
+Supports POST.  
  \[Requires write permission\]  
 ```bash
-curl localhost:8080/hello -u test:test -XPUT -d "value=world"
+curl localhost:8080/hello -u test:test -XPOST -d "world"
 OK
 ```
 
-Put key hello with value world in json format to db.  
-Supports both PUT and POST.  
+Set key hello with value world to db using "value".  
+Supports POST.  
  \[Requires write permission\]  
 ```bash
-curl localhost:8080/hello -u test:test -XPUT -d '{"value": "world"}' -H 'Content-Type: application/json'
+curl localhost:8080/hello -u test:test -XPOST -d "value=world"
 OK
 ```
+
+Set key hello with value world in json format to db.  
+Supports POST.  
+ \[Requires write permission\]  
+```bash
+curl localhost:8080/hello -u test:test -XPOST -d '{"value": "world"}' -H 'Content-Type: application/json'
+OK
+```
+
+Put file content of world.txt to key hello in db.  
+Supports PUT.  
+ \[Requires write permission\]  
+```bash
+curl localhost:8080/hello -u test:test -T world.txt
+OK
+```
+
+Note, When writing a complex stucture with Base64 encoding or special charachers use PUT or Post with the pure content.  
+If data contains value= be sure to use put. Otherwise the application/x-www-form-urlencoded decoding will fail.
 
 Delete key hello from db.  
 \[Requires write permission\]  

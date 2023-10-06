@@ -11,7 +11,8 @@ import (
 )
 
 type Auth struct {
-	Users map[string]User
+	Users  map[string]User
+	Config ConfigType
 }
 type User struct {
 	PasswordEnc [32]byte
@@ -40,11 +41,11 @@ func AuthDecode(data string) [32]byte {
 	copy(byteArray[:], bytes)
 	return byteArray
 }
-func AuthGenerate(generate string, test string) {
+func (Auth *Auth) AuthGenerate(generate string, test string) {
 	if generate != "" {
 		hash := AuthHash(generate)
 		encodedHash := AuthEncode(hash)
-		if debug {
+		if Auth.Config.Debug {
 			log.Println("encodedHash: ", encodedHash)
 		} else {
 			if test == "" {
@@ -59,15 +60,17 @@ func AuthGenerate(generate string, test string) {
 		os.Exit(0)
 	}
 }
-func (Auth *Auth) Init(config Config) {
+func (Auth *Auth) Init(config ConfigType) {
+	Auth.Config = config
 	Auth.Users = make(map[string]User)
 	for i, v := range config.Users {
-		if debug {
+		if Auth.Config.Debug {
 			log.Println(i, v)
 		}
 		Auth.Users[v.Username] = AuthUnpack(v)
+		fmt.Printf("%v %v %v/n", i, v.Username, Auth.Users[v.Username])
 	}
-	if debug {
+	if Auth.Config.Debug {
 		log.Println("Auth.init - ", Auth.Users)
 		log.Printf("auth.init - complete with %v users\n", len(Auth.Users))
 	}

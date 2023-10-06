@@ -6,22 +6,19 @@ import (
 
 type MariaDBTest struct {
 	DB     Database
-	Config Config
+	Config ConfigType
 }
 
 func Test_Maria_DB(t *testing.T) {
 	dbt := new(MariaDBTest)
-	dbt.Config = ConfigRead("example-config.yaml")
-	if dbt.Config.Mysql.Address == "" {
+	ConfigRead("example-config", &dbt.Config)
+	if dbt.Config.DatabaseType != "mysql" {
 		t.Log("no MySQL configuration in test config. Skipping test")
 		return
 	}
+	dbt.Config.Mysql.DatabaseName = "kvdb-test"
 	dbt.DB = &MariaDatabase{
-		DatabaseName: dbt.Config.Mysql.DatabaseName,
-		TableName:    "kvdb-test",
-		Host:         dbt.Config.Mysql.Address,
-		User:         dbt.Config.Mysql.Username,
-		Password:     dbt.Config.Mysql.Password,
+		Config: &dbt.Config,
 	}
 	t.Run("initialize db", func(t *testing.T) {
 		dbt.DB.Init()
@@ -56,7 +53,7 @@ func Test_Maria_DB(t *testing.T) {
 		}
 	})
 	t.Run("Counter Integration Test (stored db)", func(t *testing.T) {
-		var count Counter
+		count := Counter{Config: &ConfigType{Debug: true}}
 		dbt.DB.Delete("counter")
 		count.Init(dbt.DB)
 		val := count.GetCount()

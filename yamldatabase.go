@@ -13,6 +13,7 @@ type YamlDatabase struct {
 	Initialized  bool
 	Data         map[string]string
 	DatabaseName string
+	Config       *ConfigType
 }
 
 func (DB *YamlDatabase) Init() {
@@ -20,7 +21,7 @@ func (DB *YamlDatabase) Init() {
 		DB.DatabaseName = "db.yaml"
 	}
 	defer DB.PrivateInitialize()
-	if debug {
+	if DB.Config.Debug {
 		log.Println("db.init (yaml)")
 	}
 	yamlFile, err := os.ReadFile(DB.DatabaseName)
@@ -42,7 +43,7 @@ func (DB *YamlDatabase) Init() {
 		}
 
 	}
-	if debug {
+	if DB.Config.Debug {
 		log.Println("db.init - complete")
 	}
 	DB.Initialized = true
@@ -52,7 +53,7 @@ func (DB *YamlDatabase) PrivateInitialize() {
 	if DB.Data == nil {
 		DB.Data = map[string]string{}
 		DB.Initialized = true
-		if debug {
+		if DB.Config.Debug {
 			log.Println("db.init - recovered")
 		}
 
@@ -80,7 +81,7 @@ func (DB *YamlDatabase) Get(key string) (string, bool) {
 func (DB *YamlDatabase) Write() {
 	//https://gobyexample.com/writing-files
 	// https://stackoverflow.com/questions/65207143/writing-the-contents-of-a-struct-to-yml-file
-	if debug {
+	if DB.Config.Debug {
 		log.Printf("Writing: %+v\n", DB.Data)
 	}
 
@@ -127,7 +128,7 @@ func (DB *YamlDatabase) Close() {
 		panic("Unable to close. db not initialized()")
 	}
 	DB.Write()
-	if debug {
+	if DB.Config.Debug {
 		log.Println("db.Closed")
 	}
 }
