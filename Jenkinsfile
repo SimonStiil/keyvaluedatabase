@@ -27,7 +27,7 @@ podTemplate(yaml: '''
       volumes:
       - name: kaniko-secret
         secret:
-          secretName: dockerhub-dockercred
+          secretName: github-dockercred
           items:
           - key: .dockerconfigjson
             path: config.json
@@ -55,7 +55,7 @@ podTemplate(yaml: '''
     stage('Build Docker Image') {
       container('kaniko') {
         sh '''
-          /kaniko/executor --force --context `pwd` --log-format text --destination docker.io/simonstiil/kvdb:$BRANCH_NAME
+          /kaniko/executor --force --context `pwd` --log-format text --destination ghcr.io/simonstiil/kvdb:$BRANCH_NAME
         '''
       }
     }
