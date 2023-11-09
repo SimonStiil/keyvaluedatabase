@@ -10,21 +10,21 @@ import (
 )
 
 type YamlDatabase struct {
-	Initialized bool
-	Name        string
-	Data        map[string]string
+	Initialized  bool
+	Data         map[string]string
+	DatabaseName string
+	Config       *ConfigType
 }
 
-func (DB *YamlDatabase) Init(host string, password string) {
-	DB.Name = "db.yaml"
-	if host != "" {
-		DB.Name = host
+func (DB *YamlDatabase) Init() {
+	if DB.DatabaseName == "" {
+		DB.DatabaseName = "db.yaml"
 	}
 	defer DB.PrivateInitialize()
-	if debug {
+	if DB.Config.Debug {
 		log.Println("db.init (yaml)")
 	}
-	yamlFile, err := os.ReadFile(DB.Name)
+	yamlFile, err := os.ReadFile(DB.DatabaseName)
 	if err != nil {
 		// https://stackoverflow.com/questions/12518876/how-to-check-if-a-file-exists-in-go
 		if !errors.Is(err, os.ErrNotExist) {
@@ -43,7 +43,7 @@ func (DB *YamlDatabase) Init(host string, password string) {
 		}
 
 	}
-	if debug {
+	if DB.Config.Debug {
 		log.Println("db.init - complete")
 	}
 	DB.Initialized = true
@@ -53,7 +53,7 @@ func (DB *YamlDatabase) PrivateInitialize() {
 	if DB.Data == nil {
 		DB.Data = map[string]string{}
 		DB.Initialized = true
-		if debug {
+		if DB.Config.Debug {
 			log.Println("db.init - recovered")
 		}
 
@@ -81,11 +81,11 @@ func (DB *YamlDatabase) Get(key string) (string, bool) {
 func (DB *YamlDatabase) Write() {
 	//https://gobyexample.com/writing-files
 	// https://stackoverflow.com/questions/65207143/writing-the-contents-of-a-struct-to-yml-file
-	if debug {
+	if DB.Config.Debug {
 		log.Printf("Writing: %+v\n", DB.Data)
 	}
 
-	file, err := os.OpenFile(DB.Name, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
+	file, err := os.OpenFile(DB.DatabaseName, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		log.Fatalf("error opening/creating file: %v", err)
 	}
@@ -128,7 +128,7 @@ func (DB *YamlDatabase) Close() {
 		panic("Unable to close. db not initialized()")
 	}
 	DB.Write()
-	if debug {
+	if DB.Config.Debug {
 		log.Println("db.Closed")
 	}
 }

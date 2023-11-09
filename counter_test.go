@@ -12,6 +12,7 @@ type CountTest struct {
 
 func Test_getCount(t *testing.T) {
 	ct := new(CountTest)
+	ct.Count.Config = &ConfigType{Debug: true}
 	ct.GetCountTest(t)
 }
 

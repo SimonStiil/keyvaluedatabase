@@ -3,9 +3,10 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
-	"os"
 	"reflect"
 	"runtime"
 	"strings"
@@ -15,14 +16,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/spf13/viper"
 )
 
 var (
-	debug          bool
 	generate       string
 	test           string
 	configFileName string
-	port           string
 	requests       = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "http_endpoint_equests_count",
 		Help: "The amount of requests to an endpoint",
@@ -30,20 +30,53 @@ var (
 	)
 )
 
+type ConfigType struct {
+	Debug          bool             `mapstructure:"debug"`
+	Port           string           `mapstructure:"port"`
+	DatabaseType   string           `mapstructure:"databaseType"`
+	Users          []ConfigUser     `mapstructure:"users"`
+	Hosts          []ConfigHosts    `mapstructure:"hosts"`
+	TrustedProxies []string         `mapstructure:"trustedProxies"`
+	Redis          ConfigRedis      `mapstructure:"redis"`
+	Mysql          ConfigMysql      `mapstructure:"mysql"`
+	Prometheus     ConfigPrometheus `mapstructure:"prometheus"`
+}
+
+type ConfigUser struct {
+	Username    string            `mapstructure:"username"`
+	Password    string            `mapstructure:"password"`
+	Permissions ConfigPermissions `mapstructure:"permissions"`
+}
+
+type ConfigHosts struct {
+	Address     string            `mapstructure:"address"`
+	Permissions ConfigPermissions `mapstructure:"permissions"`
+}
+
+type ConfigPermissions struct {
+	Read  bool `mapstructure:"read"`
+	Write bool `mapstructure:"write"`
+	List  bool `mapstructure:"list"`
+}
+type ConfigPrometheus struct {
+	Enabled  bool   `mapstructure:"enabled"`
+	Endpoint string `mapstructure:"endpoint"`
+}
+
 const (
 	BaseENVname = "KVDB"
 )
 
 type Application struct {
 	Auth     Auth
-	Config   Config
+	Config   ConfigType
 	Handlers struct {
 		GreetingController http.HandlerFunc
 		HealthActuator     http.HandlerFunc
 		RootController     http.HandlerFunc
 		ListController     http.HandlerFunc
 	}
-	Count        Counter
+	Count        *Counter
 	DB           Database
 	HostHeadders []string
 }
@@ -67,6 +100,7 @@ func (App *Application) GreetingController(w http.ResponseWriter, r *http.Reques
 	requests.WithLabelValues(r.URL.EscapedPath(), r.Method).Inc()
 	//https://stackoverflow.com/questions/64437991/prevent-http-handlefunc-funcw-r-handler-being-called-for-all-unmatc
 	if !(r.URL.Path == "/system/greeting") {
+		log.Printf("%v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 404)
 		http.NotFoundHandler().ServeHTTP(w, r)
 		return
 	}
@@ -77,6 +111,7 @@ func (App *Application) GreetingController(w http.ResponseWriter, r *http.Reques
 		name = val[0]
 	}
 	reply := Greeting{App.Count.GetCount(), "Hello, " + name}
+	log.Printf("%v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 200)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(reply)
 	return
@@ -92,10 +127,11 @@ func (App *Application) RootController(w http.ResponseWriter, r *http.Request) {
 	method := r.Method
 	slashes := strings.Count(r.URL.Path, "/")
 	id := App.Count.GetCount()
-	if debug {
+	if App.Config.Debug {
 		log.Printf("%d RootController %v %v %v\n", id, method, key, slashes)
 	}
 	if len(slashSeperated) > 1 {
+		log.Printf("%v %v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 404, "ToManySlashes")
 		http.NotFoundHandler().ServeHTTP(w, r)
 		return
 	}
@@ -108,7 +144,7 @@ func (App *Application) RootController(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		if debug {
+		if App.Config.Debug {
 			log.Printf("%d %v key: %v Value: %v\n", id, method, data.Key, data.Value)
 		}
 		if data.Key == "" {
@@ -116,7 +152,7 @@ func (App *Application) RootController(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		value, ok := App.DB.Get(key)
-		if debug {
+		if App.Config.Debug {
 			log.Printf("%d value(%v): %v\n", id, ok, value)
 		}
 		if !ok {
@@ -124,15 +160,16 @@ func (App *Application) RootController(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		reply := KVPair{Key: key, Value: value}
+		log.Printf("%v %v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 200, data.Key)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(reply)
 		return
-	case "POST", "PUT":
+	case "POST":
 		data := KVPair{Key: key}
 		if !App.decodeAny(w, r, &data) {
 			return
 		}
-		if debug {
+		if App.Config.Debug {
 			log.Printf("%d %v key: %v Value: %v\n", id, method, data.Key, data.Value)
 		}
 		if key != "" && key != data.Key {
@@ -141,13 +178,48 @@ func (App *Application) RootController(w http.ResponseWriter, r *http.Request) {
 		}
 		App.DB.Set(data.Key, data.Value)
 		value, ok := App.DB.Get(data.Key)
-		if debug {
+		if App.Config.Debug {
 			log.Printf("%d value(%v): %v\n", id, ok, value)
 		}
 		if !ok {
 			http.NotFoundHandler().ServeHTTP(w, r)
 			return
 		}
+		log.Printf("%v %v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 201, data.Key)
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusCreated)
+		w.Write([]byte("OK"))
+		return
+
+	case "PUT":
+		if key == "" {
+			http.NotFoundHandler().ServeHTTP(w, r)
+			return
+		}
+		contenttype := r.Header.Get("Content-Type")
+		var bodyBytes []byte
+		var err error
+		if r.Body != nil {
+			bodyBytes, err = io.ReadAll(r.Body)
+			if err != nil {
+				fmt.Printf("Body reading error: %v", err)
+				return
+			}
+			defer r.Body.Close()
+		}
+		if App.Config.Debug {
+			log.Printf("%d %v key: %v Content-Type: %v Length %v(%v)\n", id, method, key, contenttype, len(bodyBytes), r.ContentLength)
+		}
+		App.DB.Set(key, string(bodyBytes))
+		value, ok := App.DB.Get(key)
+		if App.Config.Debug {
+			log.Printf("%d value(%v): %v\n", id, ok, value)
+		}
+		if !ok {
+			http.NotFoundHandler().ServeHTTP(w, r)
+			return
+		}
+		log.Printf("%v %v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 201, key)
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusCreated)
 		w.Write([]byte("OK"))
@@ -158,7 +230,7 @@ func (App *Application) RootController(w http.ResponseWriter, r *http.Request) {
 		if !App.decodeAny(w, r, &data) {
 			return
 		}
-		if debug {
+		if App.Config.Debug {
 			log.Printf("%d %v key: %v Type: %v\n", id, method, data.Key, data.Type)
 		}
 		if key != "" && key != data.Key {
@@ -171,25 +243,27 @@ func (App *Application) RootController(w http.ResponseWriter, r *http.Request) {
 			newData.Key = data.Key
 		}
 		newData.Value = AuthGenerateRandomString(32)
-		if debug {
+		if App.Config.Debug {
 			log.Printf("%d value(%v): %v\n", id, newData.Key, newData.Value)
 		}
 		_, exists := App.DB.Get(data.Key)
 		if data.Type == "roll" && exists {
 			App.DB.Set(data.Key, newData.Value)
+			log.Printf("%v %v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 200, data.Key)
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(newData)
 
-			if debug {
+			if App.Config.Debug {
 				log.Printf("%d value roll\n", id)
 			}
 			return
 		}
 		if data.Type == "generate" && !exists {
 			App.DB.Set(data.Key, newData.Value)
+			log.Printf("%v %v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 200, data.Key)
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(newData)
-			if debug {
+			if App.Config.Debug {
 				log.Printf("%d value generate\n", id)
 			}
 			return
@@ -203,10 +277,11 @@ func (App *Application) RootController(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		if debug {
+		if App.Config.Debug {
 			log.Printf("%d %v key: %v Value: %v\n", id, method, data.Key, data.Value)
 		}
 		App.DB.Delete(data.Key)
+		log.Printf("%v %v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 201, data.Key)
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusCreated)
 		w.Write([]byte("OK"))
@@ -223,13 +298,29 @@ func (App *Application) decodeAny(w http.ResponseWriter, r *http.Request, data a
 	if contentType == "" && r.ContentLength == 0 {
 		return true
 	}
+
 	switch contentType {
 	case "application/x-www-form-urlencoded":
-		return App.decodeXWWWForm(w, r, data)
+
+		if r.Body != nil {
+			bodyBytes, err := io.ReadAll(r.Body)
+			if err != nil {
+				fmt.Printf("Body reading error: %v", err)
+				return false
+			}
+			defer r.Body.Close()
+			body := string(bodyBytes)
+			if strings.Contains(body, "key=") || strings.Contains(body, "key=") {
+				return App.decodeXWWWForm(w, r, data)
+			}
+			construct := data.(*KVPair)
+			construct.Value = body
+			return true
+		}
 	case "application/json":
 		return App.decodeJson(w, r, data)
 	}
-	if debug {
+	if App.Config.Debug {
 		log.Printf("Unknown Content-Type: %+v\n", contentType)
 	}
 	return false
@@ -239,7 +330,7 @@ func (App *Application) decodeJson(w http.ResponseWriter, r *http.Request, data 
 	status := true
 	defer func() {
 		if rec := recover(); rec != nil {
-			if debug {
+			if App.Config.Debug {
 				log.Printf("Panic: %+v\n", rec)
 			}
 			App.BadRequestHandler().ServeHTTP(w, r)
@@ -253,16 +344,19 @@ func (App *Application) decodeJson(w http.ResponseWriter, r *http.Request, data 
 func (App *Application) decodeXWWWForm(w http.ResponseWriter, r *http.Request, data any) bool {
 	err := r.ParseForm()
 	if err != nil {
-		if debug {
-			log.Printf("ParseForm: %v\n", err)
+		if App.Config.Debug {
+			log.Printf("ParseForm: %v, %t\n", err, err)
 		}
 		App.BadRequestHandler().ServeHTTP(w, r)
 		return false
 	}
+	if App.Config.Debug {
+		log.Printf("ParseForm(PostForm): %v\n", r.PostForm)
+	}
 	err = decoder.Decode(data, r.PostForm)
 	if err != nil {
-		if debug {
-			log.Printf("ParseForm: %v\n", err)
+		if App.Config.Debug {
+			log.Printf("ParseForm(Decode): %v, %v\n", err, err.Error())
 		}
 		App.BadRequestHandler().ServeHTTP(w, r)
 		return false
@@ -274,14 +368,16 @@ func (App *Application) ListController(w http.ResponseWriter, r *http.Request) {
 	requests.WithLabelValues(r.URL.EscapedPath(), r.Method).Inc()
 	//https://stackoverflow.com/questions/64437991/prevent-http-handlefunc-funcw-r-handler-being-called-for-all-unmatc
 	if !(r.URL.Path == "/system/list") {
+		log.Printf("%v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 404)
 		http.NotFoundHandler().ServeHTTP(w, r)
 		return
 	}
 	id := App.Count.GetCount()
-	if debug {
+	if App.Config.Debug {
 		log.Printf("%d ListController\n", id)
 	}
 	content := App.DB.Keys()
+	log.Printf("%v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 200)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(content)
 	return
@@ -294,6 +390,7 @@ type Health struct {
 
 func (App *Application) BadRequestHandler() http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("%v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 400)
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("400 Bad Request"))
@@ -309,7 +406,6 @@ func (App *Application) HealthActuator(w http.ResponseWriter, r *http.Request) {
 		http.NotFoundHandler().ServeHTTP(w, r)
 		return
 	}
-	log.Println("Health-check")
 	reply := Health{Status: "UP", Requests: int(App.Count.PeakCount())}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(reply)
@@ -340,7 +436,7 @@ func (App *Application) BasicAuth(next http.HandlerFunc, permission *ConfigPermi
 				permission = &ConfigPermissions{Write: true, Read: true, List: true}
 			}
 		}
-		if debug {
+		if App.Config.Debug {
 			log.Println("BasicAuth for: ", GetFunctionName(next))
 		}
 		username, password, ok := r.BasicAuth()
@@ -350,13 +446,16 @@ func (App *Application) BasicAuth(next http.HandlerFunc, permission *ConfigPermi
 				passwordHash := AuthHash(password)
 				if AuthTest(passwordHash, user.PasswordEnc) {
 					if AuthTestPermission(user.Permissions, *permission) {
+						r.Header.Set("secret_remote_username", username)
 						next.ServeHTTP(w, r)
 						return
 					}
 				}
 			}
+		} else {
+			username = "-"
 		}
-		log.Println("Basic Auth Failed")
+		log.Printf("%v %v %v %v %v %v", r.Header.Get("secret_remote_address"), username, r.Method, r.URL.Path, 401, "BasicAuthCheckFailed")
 		w.Header().Set("WWW-Authenticate", `Basic realm="restricted", charset="UTF-8"`)
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 	})
@@ -383,13 +482,13 @@ func (App *Application) HostBlocker(next http.HandlerFunc, permission *ConfigPer
 		ip, _ := remoteaddr.Parse().IP(r)
 		address := ip
 		foundHeadderName := "remoteaddr"
-		if debug {
+		if App.Config.Debug {
 			log.Println("HostBlocker - ", "request from: ", address)
 		}
 		var trustedProxy bool
 		for _, proxyAddress := range App.Config.TrustedProxies {
 			if proxyAddress == address {
-				if debug {
+				if App.Config.Debug {
 					log.Printf("HostBlocker - trustedProxy - %v is trusted\n", address)
 				}
 				trustedProxy = true
@@ -400,7 +499,7 @@ func (App *Application) HostBlocker(next http.HandlerFunc, permission *ConfigPer
 			for _, headderName := range App.HostHeadders {
 				headder := r.Header[headderName]
 				if len(headder) > 0 {
-					if debug {
+					if App.Config.Debug {
 						log.Println("HostBlocker - ", headderName, " - ", address)
 					}
 					address = headder[0]
@@ -409,7 +508,7 @@ func (App *Application) HostBlocker(next http.HandlerFunc, permission *ConfigPer
 				}
 			}
 		} else {
-			if debug {
+			if App.Config.Debug {
 				log.Printf("HostBlocker - trustedProxy - %v is not trusted, skipping headders\n", address)
 			}
 		}
@@ -419,44 +518,60 @@ func (App *Application) HostBlocker(next http.HandlerFunc, permission *ConfigPer
 			if host.Address == address {
 				found = true
 				if AuthTestPermission(host.Permissions, *permission) {
+					r.Header.Set("secret_remote_address", address)
 					next.ServeHTTP(w, r)
 					return
 				} else {
-					if debug {
+					if App.Config.Debug {
 						log.Println("HostBlocker - ", foundHeadderName, " - AuthTestPermission failed for ", host.Address)
 					}
 				}
 			}
 		}
-		if !found && debug {
+		if !found && App.Config.Debug {
 			log.Println("HostBlocker - ", foundHeadderName, " - Lookup Host failed for ", address)
 		}
-		log.Println("Host Blocker Failed")
+		log.Printf("%v %v %v %v %v %v", address, "-", r.Method, r.URL.Path, 401, "HostCheckFailed")
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 	})
 }
 
+func ConfigRead(configFileName string, configOutput *ConfigType) {
+	configReader := viper.New()
+	configReader.SetConfigName(configFileName)
+	configReader.SetConfigType("yaml")
+	configReader.AddConfigPath("/app/")
+	configReader.AddConfigPath(".")
+	configReader.SetEnvPrefix(BaseENVname)
+	MariaDBGetDefaults(configReader)
+	RedisDBGetDefaults(configReader)
+	configReader.SetDefault("debug", false)
+	configReader.SetDefault("port", 8080)
+	configReader.SetDefault("databaseType", "yaml")
+	configReader.SetDefault("prometheus.enabled", true)
+	configReader.SetDefault("prometheus.endpoint", "/system/metrics")
+	err := configReader.ReadInConfig() // Find and read the config file
+	if err != nil {                    // Handle errors reading the config file
+		panic(fmt.Errorf("fatal error config file: %w", err))
+	}
+	configReader.AutomaticEnv()
+	configReader.Unmarshal(configOutput)
+}
+
 // https://medium.com/mercadolibre-tech/go-language-relational-databases-and-orms-682a5fd3bbb6
 func main() {
-	flag.BoolVar(&debug, "debug", false, "Enable Debugging output")
-
 	flag.StringVar(&generate, "generate", "", "Generate an encrypted password to use for basic auth")
 	flag.StringVar(&test, "test", "", "Test a base64hash versus a password")
-	flag.StringVar(&configFileName, "config", "config.yaml", "Use a different config file name")
-	flag.StringVar(&port, "port", "8080", "port to use for the service")
+	flag.StringVar(&configFileName, "config", "config", "Use a different config file name")
 	flag.Parse()
-	debugString := strings.ToLower(os.Getenv(BaseENVname + "_DEBUG"))
-	if !debug {
-		debug = (debugString != "" && debugString != "false" && debugString != "no")
-	}
-	if debug {
-		log.Println("Debugging: ", debug)
-	}
-	AuthGenerate(generate, test)
-
-	log.Println("Starting")
 	App := new(Application)
-	App.Config = ConfigRead(configFileName)
+	log.Println("Reading Configuration")
+	ConfigRead(configFileName, &App.Config)
+
+	if App.Config.Debug {
+		log.Println("Debugging: ", App.Config.Debug)
+	}
+	App.Auth.AuthGenerate(generate, test)
 	App.Auth.Init(App.Config)
 
 	App.HostHeadders = []string{
@@ -471,15 +586,21 @@ func main() {
 		"Proxy-Client-IP",
 		"WL-Proxy-Client-IP",
 		"REMOTE_ADDR"}
-
-	if App.Config.Redis.Address == "" {
-		log.Printf("%v_REDIS_HOS using yaml db\n", BaseENVname)
-		App.DB = new(YamlDatabase)
-		App.DB.Init("", "")
-	} else {
-		App.DB = new(RedisDatabase)
-		App.DB.Init(App.Config.Redis.Address, App.Config.Redis.Password)
+	switch App.Config.DatabaseType {
+	case "redis":
+		log.Printf("Using Redis DB\n")
+		App.DB = &RedisDatabase{Config: &App.Config}
+		App.DB.Init()
+	case "mysql":
+		log.Printf("Using Maria DB\n")
+		App.DB = &MariaDatabase{Config: &App.Config}
+		App.DB.Init()
+	case "yaml":
+		log.Print("Using Yaml DB. (no Redis or Mysql configuration)\n")
+		App.DB = &YamlDatabase{Config: &App.Config}
+		App.DB.Init()
 	}
+	App.Count = &Counter{Config: &App.Config}
 	App.Count.Init(App.DB)
 	defer App.DB.Close()
 	App.Handlers.GreetingController = http.HandlerFunc(App.GreetingController)
@@ -487,22 +608,16 @@ func main() {
 	App.Handlers.ListController = http.HandlerFunc(App.ListController)
 	App.Handlers.HealthActuator = http.HandlerFunc(App.HealthActuator)
 	if App.Config.Prometheus.Enabled {
-		endpoint := "/system/metrics"
-		if App.Config.Prometheus.Endpoint != "" {
-			endpoint = App.Config.Prometheus.Endpoint
-		}
-
-		http.Handle(endpoint, promhttp.Handler())
+		log.Printf("Metrics enabled at %v\n", App.Config.Prometheus.Endpoint)
+		http.Handle(App.Config.Prometheus.Endpoint, promhttp.Handler())
 	}
-	// ReadPermission := &ConfigPermissions{Read: true}
-	// WritePermission := &ConfigPermissions{Read: true}
 	ListPermission := &ConfigPermissions{List: true}
 	http.HandleFunc("/system/greeting", App.HostBlocker(App.BasicAuth(App.Handlers.GreetingController, nil), nil))
 	http.HandleFunc("/", App.HostBlocker(App.BasicAuth(App.Handlers.RootController, nil), nil))
 	http.HandleFunc("/system/list", App.HostBlocker(App.BasicAuth(App.Handlers.ListController, ListPermission), ListPermission))
 
 	http.HandleFunc("/system/health", App.Handlers.HealthActuator)
-	if debug {
+	if App.Config.Debug {
 		if len(App.Config.Hosts) == 0 {
 			log.Println("config: hosts does not contain any entries, all hosts allowed")
 		}
@@ -510,6 +625,6 @@ func main() {
 			log.Println("config: users does not contain any entries, password auth disabled")
 		}
 	}
-	log.Println("Serving on port 8080")
-	log.Fatal(http.ListenAndServe(":"+port, nil))
+	log.Printf("Serving on port %v", App.Config.Port)
+	log.Fatal(http.ListenAndServe(":"+App.Config.Port, nil))
 }

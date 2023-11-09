@@ -3,30 +3,46 @@ package main
 import (
 	"context"
 	"log"
+	"os"
 
 	redis "github.com/redis/go-redis/v9"
+	"github.com/spf13/viper"
 )
 
 type RedisDatabase struct {
 	Initialized bool
 	CTX         context.Context
 	RDC         *redis.Client
+	Config      *ConfigType
+	Password    string
 }
 
-func (db *RedisDatabase) Init(host string, password string) {
-	if debug {
+type ConfigRedis struct {
+	Address         string `mapstructure:"address"`
+	EnvVariableName string `mapstructure:"envVariableName"`
+}
+
+func RedisDBGetDefaults(configReader *viper.Viper) {
+	configReader.SetDefault("redis.address", "localhost:6379")
+	configReader.SetDefault("redis.envVariableName", BaseENVname+"_REDIS_PASSWORD")
+}
+
+func (DB *RedisDatabase) Init() {
+	if DB.Config.Debug {
 		log.Println("db.init (redis)")
 	}
-	db.CTX = context.Background()
-	db.RDC = redis.NewClient(&redis.Options{
-		Addr:     host,
-		Password: password, // no password set
-		DB:       1,        // use default DB
+
+	DB.Password = os.Getenv(DB.Config.Redis.EnvVariableName)
+	DB.CTX = context.Background()
+	DB.RDC = redis.NewClient(&redis.Options{
+		Addr:     DB.Config.Redis.Address,
+		Password: DB.Password, // no password set
+		DB:       1,           // use default DB
 	})
-	if debug {
+	if DB.Config.Debug {
 		log.Println("db.init - complete")
 	}
-	db.Initialized = true
+	DB.Initialized = true
 }
 
 func (DB *RedisDatabase) Set(key string, value interface{}) {
@@ -58,7 +74,7 @@ func (DB *RedisDatabase) Keys() []string {
 	}
 	val, err := DB.RDC.Keys(DB.CTX, "*").Result()
 
-	if debug {
+	if DB.Config.Debug {
 		log.Printf("DB.List: %v %v\n", val, err)
 	}
 	if err == redis.Nil {
@@ -93,7 +109,7 @@ func (DB *RedisDatabase) Close() {
 	if err != nil {
 		panic(err)
 	}
-	if debug {
+	if DB.Config.Debug {
 		log.Println("db.closed")
 	}
 }
