@@ -61,10 +61,17 @@ podTemplate(yaml: '''
     stage('Build Docker Image') {
       container('kaniko') {
         withEnv(["GIT_COMMIT=${scmData.GIT_COMMIT}"]) {
-          sh '''
-            /kaniko/executor --force --context `pwd` --log-format text --destination ghcr.io/simonstiil/kvdb:$BRANCH_NAME --label org.opencontainers.image.description=$GIT_COMMIT
-          '''
+          if (isMainBranch()){
+            sh '''
+              /kaniko/executor --force --context `pwd` --log-format text --destination ghcr.io/simonstiil/kvdb:$BRANCH_NAME --destination ghcr.io/simonstiil/kvdb:latest --label org.opencontainers.image.description=https://github.com/SimonStiil/keyvaluedatabase/commit/$GIT_COMMIT
+            '''
+          } else {
+            sh '''
+              /kaniko/executor --force --context `pwd` --log-format text --destination ghcr.io/simonstiil/kvdb:$BRANCH_NAME --label org.opencontainers.image.description=https://github.com/SimonStiil/keyvaluedatabase/commit/$GIT_COMMIT
+            '''
+          }
         }
+        
       }
     }
   }
