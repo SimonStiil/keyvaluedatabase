@@ -1,6 +1,6 @@
 properties([disableConcurrentBuilds(), buildDiscarder(logRotator(artifactDaysToKeepStr: '5', artifactNumToKeepStr: '5', daysToKeepStr: '5', numToKeepStr: '5'))])
 
-@Library('pipeline-library@devops-github')
+@Library('pipeline-library')
 import dk.stiil.pipeline.Constants
 
 podTemplate(yaml: '''
