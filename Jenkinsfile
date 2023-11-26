@@ -38,6 +38,7 @@ podTemplate(yaml: '''
       scmData = checkout scm
       gitMap = scmGetOrgRepo scmData.GIT_URL
       githubWebhookManager gitMap: gitMap
+      // Non importaint comment
     }
     container('golang') {
       stage('UnitTests') {
