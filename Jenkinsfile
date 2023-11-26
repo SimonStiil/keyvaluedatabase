@@ -37,51 +37,7 @@ podTemplate(yaml: '''
     stage('checkout SCM') {  
       scmData = checkout scm
       gitMap = scmGetOrgRepo scmData.GIT_URL
-      if (gitMap.host == "github.com") {
-        def url = env.JENKINS_URL + "generic-webhook-trigger/invoke?token="
-        def events = ["delete", "push"]
-      //https://docs.github.com/en/rest/repos/webhooks?apiVersion=2022-11-28
-        withCredentials([usernamePassword(credentialsId: "github-login-secret",
-                                          usernameVariable : 'GITHUB_USERNAME',
-                                          passwordVariable: 'GITHUB_PERSONAL' )]) {
-          def response = httpRequest customHeaders: [[name: 'Accept', value: 'application/vnd.github+json'],
-                                                     [name: 'Authorization', value: 'Bearer '+GITHUB_PERSONAL],
-                                                     [name: 'X-GitHub-Api-Version', value: '2022-11-28']],
-                  url: "https://api.github.com/repos/${gitMap.fullName}/hooks"
-          def jsonResponse = readJSON text: response.content
-          def configFound = false
-          def configCorrect = false
-          for (item in jsonResponse) {
-            if (item.config.url.contains(url)) {
-              configFound = true
-              def found = true
-              for (event in item.events) {
-                def foundEvent = false
-                for (matchEvent in events) {
-                  if (event == matchEvent) {
-                    foundEvent = true
-                  }
-                }
-                if (!foundEvent){
-                  found = false
-                }
-              }
-              if (found)
-              {
-                echo "WebHook: Already configured"
-                configCorrect = true
-              } else {
-                echo "WebHook: Configured but not matching events"
-              }
-            }
-          }
-          if (!configFound) {
-            echo "WebHook: No config found"
-          }
-        }
-      } else {
-        echo "WebHook: Repository host ${gitMap.host} is not github.com"
-      }
+      githubWebhookManager gitMap: gitMap
     }
     container('golang') {
       stage('UnitTests') {
