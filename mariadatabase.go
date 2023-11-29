@@ -68,11 +68,11 @@ func (MDB *MariaDatabase) Set(key string, value interface{}) {
 	if !MDB.Initialized {
 		panic("F Unable to set. db not initialized()")
 	}
-	statement, err := MDB.Connection.Prepare(fmt.Sprintf("INSERT INTO `%v` (`%v`, `%v`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `%v`=VALUES(`%v`)", MDB.Config.Mysql.TableName, MDB.Config.Mysql.KeyName, MDB.Config.Mysql.ValueName, MDB.Config.Mysql.KeyName, MDB.Config.Mysql.KeyName))
+	statement, err := MDB.Connection.Prepare(fmt.Sprintf("INSERT INTO `%v` (`%v`, `%v`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `%v`=?", MDB.Config.Mysql.TableName, MDB.Config.Mysql.KeyName, MDB.Config.Mysql.ValueName, MDB.Config.Mysql.ValueName))
 	if err != nil {
 		panic(err)
 	}
-	_, err = statement.Exec(key, value)
+	_, err = statement.Exec(key, value, value)
 	if err != nil {
 		panic(err)
 	}

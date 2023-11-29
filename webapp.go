@@ -105,7 +105,7 @@ func (App *Application) GreetingController(w http.ResponseWriter, r *http.Reques
 		http.NotFoundHandler().ServeHTTP(w, r)
 		return
 	}
-	log.Println("Greetings-check")
+	log.Println("I Greetings-check")
 	name := "World!"
 	val := r.URL.Query()["name"]
 	if len(val) > 0 {
@@ -245,22 +245,22 @@ func (App *Application) RootController(w http.ResponseWriter, r *http.Request) {
 		}
 		newData.Value = AuthGenerateRandomString(32)
 		if App.Config.Debug {
-			log.Printf("%d value(%v): %v\n", id, newData.Key, newData.Value)
+			log.Printf("D %d value(%v): %v\n", id, newData.Key, newData.Value)
 		}
 		_, exists := App.DB.Get(data.Key)
 		if data.Type == "roll" && exists {
-			App.DB.Set(data.Key, newData.Value)
+			App.DB.Set(newData.Key, newData.Value)
 			log.Printf("I %v %v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 200, data.Key)
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(newData)
 
 			if App.Config.Debug {
-				log.Printf("%d value roll\n", id)
+				log.Printf("D %d value roll\n", id)
 			}
 			return
 		}
 		if data.Type == "generate" && !exists {
-			App.DB.Set(data.Key, newData.Value)
+			App.DB.Set(newData.Key, newData.Value)
 			log.Printf("I %v %v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 200, data.Key)
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(newData)
@@ -466,7 +466,7 @@ func (App *Application) BasicAuth(next http.HandlerFunc, permission *ConfigPermi
 			}
 		}
 		if App.Config.Debug {
-			log.Println("BasicAuth for: ", GetFunctionName(next))
+			log.Println("D BasicAuth for: ", GetFunctionName(next))
 		}
 		username, password, ok := r.BasicAuth()
 		if ok {
@@ -560,7 +560,7 @@ func (App *Application) HostBlocker(next http.HandlerFunc, permission *ConfigPer
 		if !found && App.Config.Debug {
 			log.Println("D HostBlocker - ", foundHeadderName, " - Lookup Host failed for ", address)
 		}
-		log.Printf("%v %v %v %v %v %v", address, "-", r.Method, r.URL.Path, 401, "HostCheckFailed")
+		log.Printf("I %v %v %v %v %v %v", address, "-", r.Method, r.URL.Path, 401, "HostCheckFailed")
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 	})
 }
