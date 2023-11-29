@@ -41,7 +41,7 @@ func MariaDBGetDefaults(configReader *viper.Viper) {
 
 func (MDB *MariaDatabase) Init() {
 	if MDB.Config.Debug {
-		log.Println("db.init (MariaDB)")
+		log.Println("D db.init (MariaDB)")
 	}
 	if MDB.Config.Mysql.DatabaseName == "" {
 		MDB.DatabaseName = MDB.Config.Mysql.Username
@@ -52,7 +52,9 @@ func (MDB *MariaDatabase) Init() {
 	var err error
 	connectionString := fmt.Sprintf("%v:%v@tcp(%v)/%v", MDB.Config.Mysql.Username, MDB.Password, MDB.Config.Mysql.Address, MDB.DatabaseName)
 
-	log.Println("I db.init - ", connectionString)
+	if MDB.Config.Debug {
+		log.Println("D db.init - ", connectionString)
+	}
 	MDB.Connection, err = sql.Open("mysql", connectionString)
 	if err != nil {
 		panic(err.Error())

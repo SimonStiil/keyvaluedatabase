@@ -35,7 +35,7 @@ func AuthDecode(data string) [32]byte {
 		panic(err)
 	}
 	if len(bytes) != 32 {
-		panic(fmt.Sprintf("wrong datalength %d should be 32", len(bytes)))
+		panic(fmt.Sprintf("E wrong datalength %d should be 32", len(bytes)))
 	}
 	byteArray := [32]byte{}
 	copy(byteArray[:], bytes)
@@ -46,7 +46,7 @@ func (Auth *Auth) AuthGenerate(generate string, test string) {
 		hash := AuthHash(generate)
 		encodedHash := AuthEncode(hash)
 		if Auth.Config.Debug {
-			log.Println("encodedHash: ", encodedHash)
+			log.Println("D encodedHash: ", encodedHash)
 		} else {
 			if test == "" {
 				fmt.Println(encodedHash)
@@ -65,13 +65,12 @@ func (Auth *Auth) Init(config ConfigType) {
 	Auth.Users = make(map[string]User)
 	for i, v := range config.Users {
 		if Auth.Config.Debug {
-			log.Println(i, v)
+			log.Printf("D %v %v", i, v)
 		}
 		Auth.Users[v.Username] = AuthUnpack(v)
 	}
 	if Auth.Config.Debug {
-		log.Println("Auth.init - ", Auth.Users)
-		log.Printf("auth.init - complete with %v users\n", len(Auth.Users))
+		log.Printf("D auth.init - complete with %v users\n", len(Auth.Users))
 	}
 }
 func AuthUnpack(Data ConfigUser) User {
