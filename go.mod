@@ -1,4 +1,4 @@
-module kvdb
+module github.com/SimonStiil/keyvaluedatabase
 
 go 1.18
 

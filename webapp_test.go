@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/SimonStiil/keyvaluedatabase/rest"
 	"golang.org/x/exp/slices"
 )
 
@@ -37,12 +38,12 @@ func TestGETGreeting(t *testing.T) {
 
 		app.GreetingController(response, request)
 		requestsCount++
-		var greetingReply Greeting
+		var greetingReply rest.Greeting
 		err := json.Unmarshal(response.Body.Bytes(), &greetingReply)
 		if err != nil {
 			t.Error(err)
 		}
-		greetinWanted := Greeting{0, "Hello, World!"}
+		greetinWanted := rest.Greeting{0, "Hello, World!"}
 
 		if greetingReply.Id != greetinWanted.Id {
 			t.Errorf(".id got %q, want %q", greetingReply.Id, greetinWanted.Id)
@@ -56,12 +57,12 @@ func TestGETGreeting(t *testing.T) {
 		response := httptest.NewRecorder()
 
 		app.HealthActuator(response, request)
-		var healthReply Health
+		var healthReply rest.Health
 		err := json.Unmarshal(response.Body.Bytes(), &healthReply)
 		if err != nil {
 			t.Error(err)
 		}
-		greetinWanted := Health{"UP", requestsCount}
+		greetinWanted := rest.Health{"UP", requestsCount}
 
 		if healthReply.Status != greetinWanted.Status {
 			t.Errorf(".Status got %q, want %q", healthReply.Status, greetinWanted.Status)
@@ -71,7 +72,7 @@ func TestGETGreeting(t *testing.T) {
 		}
 	})
 	okBody := "OK"
-	testData := KVPair{Key: "somekey", Value: "123"}
+	testData := rest.KVPair{Key: "somekey", Value: "123"}
 	t.Run("POST(json)", func(t *testing.T) {
 		marshalled, err := json.Marshal(testData)
 		if err != nil {
@@ -188,7 +189,7 @@ func TestGETGreeting(t *testing.T) {
 		if response.Code != http.StatusOK {
 			t.Errorf(".Code got %q, want %q", response.Code, http.StatusOK)
 		}
-		var replyPair KVPair
+		var replyPair rest.KVPair
 		err := json.Unmarshal(response.Body.Bytes(), &replyPair)
 		if err != nil {
 			t.Error(err)
