@@ -97,7 +97,7 @@ func (App *Application) GreetingController(w http.ResponseWriter, r *http.Reques
 	if len(val) > 0 {
 		name = val[0]
 	}
-	reply := rest.Greeting{Id: App.Count.GetCount(), Content: "Hello, " + name}
+	reply := rest.GreetingV1{Id: App.Count.GetCount(), Content: "Hello, " + name}
 	log.Printf("I %v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 200)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(reply)
@@ -125,7 +125,7 @@ func (App *Application) RootController(w http.ResponseWriter, r *http.Request) {
 
 	switch method {
 	case "GET":
-		data := rest.KVPair{Key: key}
+		data := rest.KVPairV1{Key: key}
 		if data.Key == "" {
 			if !App.decodeAny(w, r, &data) {
 				return
@@ -146,13 +146,13 @@ func (App *Application) RootController(w http.ResponseWriter, r *http.Request) {
 			http.NotFoundHandler().ServeHTTP(w, r)
 			return
 		}
-		reply := rest.KVPair{Key: key, Value: value}
+		reply := rest.KVPairV1{Key: key, Value: value}
 		log.Printf("I %v %v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 200, data.Key)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(reply)
 		return
 	case "POST":
-		data := rest.KVPair{Key: key}
+		data := rest.KVPairV1{Key: key}
 		if !App.decodeAny(w, r, &data) {
 			return
 		}
@@ -212,8 +212,8 @@ func (App *Application) RootController(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("OK"))
 		return
 	case "UPDATE", "PATCH":
-		data := rest.KVUpdate{Key: key}
-		var newData rest.KVPair
+		data := rest.KVUpdateV1{Key: key}
+		var newData rest.KVPairV1
 		if !App.decodeAny(w, r, &data) {
 			return
 		}
@@ -258,7 +258,7 @@ func (App *Application) RootController(w http.ResponseWriter, r *http.Request) {
 		App.BadRequestHandler().ServeHTTP(w, r)
 		return
 	case "DELETE":
-		data := rest.KVPair{Key: key}
+		data := rest.KVPairV1{Key: key}
 		if data.Key == "" {
 			if !App.decodeAny(w, r, &data) {
 				return
@@ -300,7 +300,7 @@ func (App *Application) decodeAny(w http.ResponseWriter, r *http.Request, data a
 			if strings.Contains(body, "key=") || strings.Contains(body, "key=") {
 				return App.decodeXWWWForm(w, r, data)
 			}
-			construct := data.(*rest.KVPair)
+			construct := data.(*rest.KVPairV1)
 			construct.Value = body
 			return true
 		}
@@ -383,11 +383,11 @@ func (App *Application) FullListController(w http.ResponseWriter, r *http.Reques
 		log.Printf("D %d ListController\n", id)
 	}
 	content := App.DB.Keys()
-	var fullList []rest.KVPair
+	var fullList []rest.KVPairV1
 	for _, key := range content {
 		value, ok := App.DB.Get(key)
 		if ok {
-			fullList = append(fullList, rest.KVPair{Key: key, Value: value})
+			fullList = append(fullList, rest.KVPairV1{Key: key, Value: value})
 		} else {
 			log.Printf("E Error reading key from db %v", key)
 		}
@@ -416,7 +416,7 @@ func (App *Application) HealthActuator(w http.ResponseWriter, r *http.Request) {
 		http.NotFoundHandler().ServeHTTP(w, r)
 		return
 	}
-	reply := rest.Health{Status: "UP", Requests: int(App.Count.PeakCount())}
+	reply := rest.HealthV1{Status: "UP", Requests: int(App.Count.PeakCount())}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(reply)
 	return

@@ -7,6 +7,7 @@ import (
 
 	"database/sql"
 
+	"github.com/SimonStiil/keyvaluedatabase/rest"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/spf13/viper"
 )
@@ -89,7 +90,7 @@ func (MDB *MariaDatabase) Get(key string) (string, bool) {
 		log.Fatal(err)
 	}
 	defer rows.Close()
-	var kvpair KVPair
+	var kvpair rest.KVPairV1
 	found := false
 	for rows.Next() {
 		err = rows.Scan(&kvpair.Key, &kvpair.Value)

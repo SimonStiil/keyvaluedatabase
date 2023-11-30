@@ -1,21 +1,21 @@
 package rest
 
-type KVPair struct {
+type KVPairV1 struct {
 	Key   string `json:"key"`
 	Value string `json:"value"`
 }
 
-type KVUpdate struct {
+type KVUpdateV1 struct {
 	Key  string `json:"key"`
 	Type string `json:"type"`
 }
 
-type Greeting struct {
+type GreetingV1 struct {
 	Id      uint32 `json:"id"`
 	Content string `json:"content"`
 }
 
-type Health struct {
+type HealthV1 struct {
 	Status   string `json:"status"`
 	Requests int    `json:"requests"`
 }
