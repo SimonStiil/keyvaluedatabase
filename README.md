@@ -3,7 +3,7 @@ This tool is a Key Value database usable as a webhook server.
 Originally build as "Secrets" storage for External Secrets in Kubernetes.  
 
 # Download
-Docker image can be fetched from [dockerhub simonstiil/kvdb](https://hub.docker.com/repository/docker/simonstiil/kvdb)  
+Docker image can be fetched from [ghcr.io simonstiil/kvdb](https://github.com/SimonStiil/keyvaluedatabase/pkgs/container/kvdb)  
 Can be build with go build .  
 Will also be available as a release in releases in the future
 

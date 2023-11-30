@@ -41,7 +41,7 @@ func MariaDBGetDefaults(configReader *viper.Viper) {
 
 func (MDB *MariaDatabase) Init() {
 	if MDB.Config.Debug {
-		log.Println("db.init (MariaDB)")
+		log.Println("D db.init (MariaDB)")
 	}
 	if MDB.Config.Mysql.DatabaseName == "" {
 		MDB.DatabaseName = MDB.Config.Mysql.Username
@@ -52,27 +52,29 @@ func (MDB *MariaDatabase) Init() {
 	var err error
 	connectionString := fmt.Sprintf("%v:%v@tcp(%v)/%v", MDB.Config.Mysql.Username, MDB.Password, MDB.Config.Mysql.Address, MDB.DatabaseName)
 
-	log.Println("db.init - ", connectionString)
+	if MDB.Config.Debug {
+		log.Println("D db.init - ", connectionString)
+	}
 	MDB.Connection, err = sql.Open("mysql", connectionString)
 	if err != nil {
 		panic(err.Error())
 	}
 	MDB.Connection.Exec(fmt.Sprintf("CREATE TABLE IF NOT EXISTS `%v` ( `%v` CHAR(32) PRIMARY KEY, `%v` VARCHAR(21800) NOT NULL) ENGINE = InnoDB; ", MDB.Config.Mysql.TableName, MDB.Config.Mysql.KeyName, MDB.Config.Mysql.ValueName))
 	if MDB.Config.Debug {
-		log.Println("db.init - complete")
+		log.Println("D db.init - complete")
 	}
 	MDB.Initialized = true
 }
 
 func (MDB *MariaDatabase) Set(key string, value interface{}) {
 	if !MDB.Initialized {
-		panic("Unable to set. db not initialized()")
+		panic("F Unable to set. db not initialized()")
 	}
-	statement, err := MDB.Connection.Prepare(fmt.Sprintf("INSERT INTO `%v` (`%v`, `%v`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `%v`=VALUES(`%v`)", MDB.Config.Mysql.TableName, MDB.Config.Mysql.KeyName, MDB.Config.Mysql.ValueName, MDB.Config.Mysql.KeyName, MDB.Config.Mysql.KeyName))
+	statement, err := MDB.Connection.Prepare(fmt.Sprintf("INSERT INTO `%v` (`%v`, `%v`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `%v`=?", MDB.Config.Mysql.TableName, MDB.Config.Mysql.KeyName, MDB.Config.Mysql.ValueName, MDB.Config.Mysql.ValueName))
 	if err != nil {
 		panic(err)
 	}
-	_, err = statement.Exec(key, value)
+	_, err = statement.Exec(key, value, value)
 	if err != nil {
 		panic(err)
 	}
@@ -80,7 +82,7 @@ func (MDB *MariaDatabase) Set(key string, value interface{}) {
 
 func (MDB *MariaDatabase) Get(key string) (string, bool) {
 	if !MDB.Initialized {
-		panic("Unable to get. db not initialized()")
+		panic("F Unable to get. db not initialized()")
 	}
 	rows, err := MDB.Connection.Query(fmt.Sprintf("select * from `%v` where `%v` = ? ", MDB.Config.Mysql.TableName, MDB.Config.Mysql.KeyName), key)
 	if err != nil {
@@ -101,7 +103,7 @@ func (MDB *MariaDatabase) Get(key string) (string, bool) {
 
 func (MDB *MariaDatabase) Keys() []string {
 	if !MDB.Initialized {
-		panic("Unable to get. db not initialized()")
+		panic("F Unable to get. db not initialized()")
 	}
 	rows, err := MDB.Connection.Query(fmt.Sprintf("select `%v` from `%v`", MDB.Config.Mysql.KeyName, MDB.Config.Mysql.TableName))
 	if err != nil {
@@ -122,7 +124,7 @@ func (MDB *MariaDatabase) Keys() []string {
 
 func (MDB *MariaDatabase) Delete(key string) {
 	if !MDB.Initialized {
-		panic("Unable to get. db not initialized()")
+		panic("F Unable to get. db not initialized()")
 	}
 	stmt, err := MDB.Connection.Prepare(fmt.Sprintf("delete from `%v` where `%v` = ?", MDB.Config.Mysql.TableName, MDB.Config.Mysql.KeyName))
 	if err != nil {
@@ -140,13 +142,13 @@ func (MDB *MariaDatabase) IsInitialized() bool {
 
 func (MDB *MariaDatabase) Close() {
 	if !MDB.Initialized {
-		panic("Unable to close. db not initialized()")
+		panic("F Unable to close. db not initialized()")
 	}
 	err := MDB.Connection.Close()
 	if err != nil {
 		panic(err)
 	}
 	if MDB.Config.Debug {
-		log.Println("db.closed")
+		log.Println("D db.closed")
 	}
 }
