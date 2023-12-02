@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"reflect"
 	"runtime"
@@ -522,19 +523,44 @@ func (App *Application) HostBlocker(next http.HandlerFunc, permission *ConfigPer
 				log.Printf("D HostBlocker - trustedProxy - %v is not trusted, skipping headders\n", address)
 			}
 		}
-
 		var found bool
+		denied := false
 		for _, host := range App.Config.Hosts {
-			if host.Address == address {
-				found = true
-				if AuthTestPermission(host.Permissions, *permission) {
-					r.Header.Set("secret_remote_address", address)
-					next.ServeHTTP(w, r)
-					return
-				} else {
-					if App.Config.Debug {
-						log.Println("D HostBlocker - ", foundHeadderName, " - AuthTestPermission failed for ", host.Address)
+			if !strings.Contains(host.Address, "/") {
+				if host.Address == address {
+					found = true
+					if AuthTestPermission(host.Permissions, *permission) {
+						r.Header.Set("secret_remote_address", address)
+						next.ServeHTTP(w, r)
+						return
+					} else {
+						denied = true
+						if App.Config.Debug {
+							log.Println("D HostBlocker - ", foundHeadderName, " - AuthTestPermission failed for ", host.Address)
+						}
+						break
 					}
+				}
+			}
+		}
+		if !denied {
+			for _, host := range App.Config.Hosts {
+				_, subnet, _ := net.ParseCIDR(host.Address)
+				if subnet != nil {
+					ip := net.ParseIP(address)
+					if subnet.Contains(ip) {
+						found = true
+						if AuthTestPermission(host.Permissions, *permission) {
+							r.Header.Set("secret_remote_address", address)
+							next.ServeHTTP(w, r)
+							return
+						} else {
+							if App.Config.Debug {
+								log.Println("D HostBlocker(CIDR) - ", foundHeadderName, " - AuthTestPermission failed for ", host.Address)
+							}
+						}
+					}
+
 				}
 			}
 		}

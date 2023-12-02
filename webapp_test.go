@@ -43,7 +43,7 @@ func TestGETGreeting(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		greetinWanted := rest.GreetingV1{0, "Hello, World!"}
+		greetinWanted := rest.GreetingV1{Id: 0, Content: "Hello, World!"}
 
 		if greetingReply.Id != greetinWanted.Id {
 			t.Errorf(".id got %q, want %q", greetingReply.Id, greetinWanted.Id)
@@ -62,7 +62,7 @@ func TestGETGreeting(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		greetinWanted := rest.HealthV1{"UP", requestsCount}
+		greetinWanted := rest.HealthV1{Status: "UP", Requests: requestsCount}
 
 		if healthReply.Status != greetinWanted.Status {
 			t.Errorf(".Status got %q, want %q", healthReply.Status, greetinWanted.Status)
