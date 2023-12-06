@@ -37,7 +37,7 @@ podTemplate(yaml: '''
     stage('checkout SCM') {  
       scmData = checkout scm
       gitMap = scmGetOrgRepo scmData.GIT_URL
-      githubWebhookManager gitMap: gitMap
+      githubWebhookManager gitMap: gitMap, webhookTokenId: 'jenkins-webhook-repo-cleanup'
       // Non importaint comment
     }
     container('golang') {
