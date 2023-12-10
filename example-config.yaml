@@ -32,3 +32,15 @@ mysql:
 prometheus:
   enabled: true # enable /system/metrics prometheus endpoint (for all users and hosts)
   # endpoint: # Set if different from metrics
+
+# mtls:
+  # enabled: false # Enable mTLS port
+  # port: 8443 # Port to use for mTLS
+  # certificate: server.crt # Server certificate
+  # key: server.key # Server Certificate key 
+  # caCertificate: ca.crt # Server certificate chain
+  # externalMTLS: false # Do not use internal certificate signing but expect external proxy
+  # permissions: # permissions for mtls port
+    # read: true
+    # write: false
+    # list: true
