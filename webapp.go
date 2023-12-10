@@ -1,13 +1,16 @@
 package main
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
-	"flag"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"reflect"
 	"runtime"
 	"strings"
@@ -15,72 +18,15 @@ import (
 	"github.com/SimonStiil/keyvaluedatabase/rest"
 	"github.com/gorilla/schema"
 	"github.com/netinternet/remoteaddr"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/spf13/viper"
-)
-
-var (
-	generate       string
-	test           string
-	configFileName string
-	requests       = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "http_endpoint_equests_count",
-		Help: "The amount of requests to an endpoint",
-	}, []string{"endpoint", "method"},
-	)
-)
-
-type ConfigType struct {
-	Debug          bool             `mapstructure:"debug"`
-	Port           string           `mapstructure:"port"`
-	DatabaseType   string           `mapstructure:"databaseType"`
-	Users          []ConfigUser     `mapstructure:"users"`
-	Hosts          []ConfigHosts    `mapstructure:"hosts"`
-	TrustedProxies []string         `mapstructure:"trustedProxies"`
-	Redis          ConfigRedis      `mapstructure:"redis"`
-	Mysql          ConfigMysql      `mapstructure:"mysql"`
-	Prometheus     ConfigPrometheus `mapstructure:"prometheus"`
-}
-
-type ConfigUser struct {
-	Username    string            `mapstructure:"username"`
-	Password    string            `mapstructure:"password"`
-	Permissions ConfigPermissions `mapstructure:"permissions"`
-}
-
-type ConfigHosts struct {
-	Address     string            `mapstructure:"address"`
-	Permissions ConfigPermissions `mapstructure:"permissions"`
-}
-
-type ConfigPermissions struct {
-	Read  bool `mapstructure:"read"`
-	Write bool `mapstructure:"write"`
-	List  bool `mapstructure:"list"`
-}
-type ConfigPrometheus struct {
-	Enabled  bool   `mapstructure:"enabled"`
-	Endpoint string `mapstructure:"endpoint"`
-}
-
-const (
-	BaseENVname = "KVDB"
 )
 
 type Application struct {
-	Auth     Auth
-	Config   ConfigType
-	Handlers struct {
-		GreetingController http.HandlerFunc
-		HealthActuator     http.HandlerFunc
-		RootController     http.HandlerFunc
-		ListController     http.HandlerFunc
-		FullListController http.HandlerFunc
-	}
+	Auth         Auth
+	Config       ConfigType
 	Count        *Counter
 	DB           Database
+	HTTPServer   *http.Server
+	MTLSServer   *http.Server
 	HostHeadders []string
 }
 
@@ -490,41 +436,10 @@ func (App *Application) HostBlocker(next http.HandlerFunc, permission *ConfigPer
 				permission = &ConfigPermissions{Write: true, Read: true, List: true}
 			}
 		}
-		ip, _ := remoteaddr.Parse().IP(r)
-		address := ip
-		foundHeadderName := "remoteaddr"
-		if App.Config.Debug {
-			log.Println("D HostBlocker - ", "request from: ", address)
-		}
-		var trustedProxy bool
-		for _, proxyAddress := range App.Config.TrustedProxies {
-			if proxyAddress == address {
-				if App.Config.Debug {
-					log.Printf("D HostBlocker - trustedProxy - %v is trusted\n", address)
-				}
-				trustedProxy = true
-				break
-			}
-		}
-		if trustedProxy {
-			for _, headderName := range App.HostHeadders {
-				headder := r.Header[headderName]
-				if len(headder) > 0 {
-					if App.Config.Debug {
-						log.Println("D HostBlocker - ", headderName, " - ", address)
-					}
-					address = headder[0]
-					foundHeadderName = headderName
-					break
-				}
-			}
-		} else {
-			if App.Config.Debug {
-				log.Printf("D HostBlocker - trustedProxy - %v is not trusted, skipping headders\n", address)
-			}
-		}
 		var found bool
 		denied := false
+		address := r.Header.Get("secret_remote_address")
+		foundHeadderName := r.Header.Get("secret_remote_header")
 		for _, host := range App.Config.Hosts {
 			if !strings.Contains(host.Address, "/") {
 				if host.Address == address {
@@ -572,97 +487,106 @@ func (App *Application) HostBlocker(next http.HandlerFunc, permission *ConfigPer
 	})
 }
 
-func ConfigRead(configFileName string, configOutput *ConfigType) {
-	configReader := viper.New()
-	configReader.SetConfigName(configFileName)
-	configReader.SetConfigType("yaml")
-	configReader.AddConfigPath("/app/")
-	configReader.AddConfigPath(".")
-	configReader.SetEnvPrefix(BaseENVname)
-	MariaDBGetDefaults(configReader)
-	RedisDBGetDefaults(configReader)
-	configReader.SetDefault("debug", false)
-	configReader.SetDefault("port", 8080)
-	configReader.SetDefault("databaseType", "yaml")
-	configReader.SetDefault("prometheus.enabled", true)
-	configReader.SetDefault("prometheus.endpoint", "/system/metrics")
-	err := configReader.ReadInConfig() // Find and read the config file
-	if err != nil {                    // Handle errors reading the config file
-		panic(fmt.Errorf("fatal error config file: %w", err))
-	}
-	configReader.AutomaticEnv()
-	configReader.Unmarshal(configOutput)
+func (App *Application) GetIP(next http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		address, _ := remoteaddr.Parse().IP(r)
+		foundHeadderName := "remoteaddr"
+		if App.Config.Debug {
+			log.Println("D HostBlocker - ", "request from: ", address)
+		}
+		var trustedProxy bool
+		for _, proxyAddress := range App.Config.TrustedProxies {
+			if proxyAddress == address {
+				if App.Config.Debug {
+					log.Printf("D HostBlocker - trustedProxy - %v is trusted\n", address)
+				}
+				trustedProxy = true
+				break
+			}
+		}
+		if trustedProxy {
+			for _, headderName := range App.HostHeadders {
+				headder := r.Header[headderName]
+				if len(headder) > 0 {
+					if App.Config.Debug {
+						log.Println("D HostBlocker - ", headderName, " - ", address)
+					}
+					address = headder[0]
+					foundHeadderName = headderName
+					break
+				}
+			}
+		} else {
+			if App.Config.Debug {
+				log.Printf("D HostBlocker - trustedProxy - %v is not trusted, skipping headders\n", address)
+			}
+		}
+		r.Header.Set("secret_remote_address", address)
+		r.Header.Set("secret_remote_header", foundHeadderName)
+		next.ServeHTTP(w, r)
+	})
 }
 
-// https://medium.com/mercadolibre-tech/go-language-relational-databases-and-orms-682a5fd3bbb6
-func main() {
-	flag.StringVar(&generate, "generate", "", "Generate an encrypted password to use for basic auth")
-	flag.StringVar(&test, "test", "", "Test a base64hash versus a password")
-	flag.StringVar(&configFileName, "config", "config", "Use a different config file name")
-	flag.Parse()
-	App := new(Application)
-	log.Println("I Reading Configuration")
-	ConfigRead(configFileName, &App.Config)
+func (App *Application) SetMTLSUser(next http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Header.Set("secret_remote_username", "mtls")
+		next.ServeHTTP(w, r)
+	})
+}
 
-	if App.Config.Debug {
-		log.Println("D Debugging: ", App.Config.Debug)
-	}
-	App.Auth.AuthGenerate(generate, test)
-	App.Auth.Init(App.Config)
-
-	App.HostHeadders = []string{
-		"X-Forwarded-For",
-		"HTTP_FORWARDED",
-		"HTTP_FORWARDED_FOR",
-		"HTTP_X_FORWARDED",
-		"HTTP_X_FORWARDED_FOR",
-		"HTTP_CLIENT_IP",
-		"HTTP_VIA",
-		"HTTP_X_CLUSTER_CLIENT_IP",
-		"Proxy-Client-IP",
-		"WL-Proxy-Client-IP",
-		"REMOTE_ADDR"}
-	switch App.Config.DatabaseType {
-	case "redis":
-		log.Printf("I Using Redis DB\n")
-		App.DB = &RedisDatabase{Config: &App.Config}
-		App.DB.Init()
-	case "mysql":
-		log.Printf("I Using Maria DB\n")
-		App.DB = &MariaDatabase{Config: &App.Config}
-		App.DB.Init()
-	case "yaml":
-		log.Print("I Using Yaml DB. (no Redis or Mysql configuration)\n")
-		App.DB = &YamlDatabase{Config: &App.Config}
-		App.DB.Init()
-	}
-	App.Count = &Counter{Config: &App.Config}
-	App.Count.Init(App.DB)
-	defer App.DB.Close()
-	App.Handlers.GreetingController = http.HandlerFunc(App.GreetingController)
-	App.Handlers.RootController = http.HandlerFunc(App.RootController)
-	App.Handlers.ListController = http.HandlerFunc(App.ListController)
-	App.Handlers.FullListController = http.HandlerFunc(App.FullListController)
-	App.Handlers.HealthActuator = http.HandlerFunc(App.HealthActuator)
-	if App.Config.Prometheus.Enabled {
-		log.Printf("I Metrics enabled at %v\n", App.Config.Prometheus.Endpoint)
-		http.Handle(App.Config.Prometheus.Endpoint, promhttp.Handler())
-	}
-	ListPermission := &ConfigPermissions{List: true}
-	http.HandleFunc("/system/greeting", App.HostBlocker(App.BasicAuth(App.Handlers.GreetingController, nil), nil))
-	http.HandleFunc("/", App.HostBlocker(App.BasicAuth(App.Handlers.RootController, nil), nil))
-	http.HandleFunc("/system/list", App.HostBlocker(App.BasicAuth(App.Handlers.ListController, ListPermission), ListPermission))
-	http.HandleFunc("/system/fullList", App.HostBlocker(App.BasicAuth(App.Handlers.FullListController, ListPermission), ListPermission))
-
-	http.HandleFunc("/system/health", App.Handlers.HealthActuator)
-	if App.Config.Debug {
-		if len(App.Config.Hosts) == 0 {
-			log.Println("D config: hosts does not contain any entries, all hosts allowed")
-		}
-		if len(App.Auth.Users) == 0 {
-			log.Println("D config: users does not contain any entries, password auth disabled")
-		}
+func (App *Application) ServeHTTP(mux *http.ServeMux) {
+	App.HTTPServer = &http.Server{
+		Addr:    ":" + App.Config.Port,
+		Handler: mux,
 	}
 	log.Printf("I Serving on port %v", App.Config.Port)
-	log.Fatal(http.ListenAndServe(":"+App.Config.Port, nil))
+	log.Fatal(App.HTTPServer.ListenAndServe())
+}
+func checkFileExists(filePath string) bool {
+	_, error := os.Stat(filePath)
+	return !errors.Is(error, os.ErrNotExist)
+}
+
+func (App *Application) ServeHTTPMTLS(mux *http.ServeMux) {
+	missingFile := false
+	if App.Config.MTLS.ExternalMTLS {
+		App.MTLSServer = &http.Server{
+			Addr:    ":" + App.Config.MTLS.Port,
+			Handler: mux,
+		}
+		log.Printf("I Serving MTLS on port %v", App.Config.MTLS.Port)
+		log.Fatal(App.MTLSServer.ListenAndServe())
+	} else {
+		if !checkFileExists(App.Config.MTLS.CACertificate) {
+			log.Printf("E External MTLS not Enabled but no CACertificate exists: %v", App.Config.MTLS.CACertificate)
+			missingFile = true
+		}
+		if !checkFileExists(App.Config.MTLS.Certificate) {
+			log.Printf("E External MTLS not Enabled but no Certificate exists: %v", App.Config.MTLS.Certificate)
+			missingFile = true
+		}
+		if !checkFileExists(App.Config.MTLS.Key) {
+			log.Printf("E External MTLS not Enabled but no Key exists: %v", App.Config.MTLS.Key)
+			missingFile = true
+		}
+		if !missingFile {
+			caCert, err := os.ReadFile(App.Config.MTLS.CACertificate)
+			if err != nil {
+				log.Fatal(err)
+			}
+			caCertPool := x509.NewCertPool()
+			caCertPool.AppendCertsFromPEM(caCert)
+			tlsConfig := &tls.Config{
+				ClientCAs:  caCertPool,
+				ClientAuth: tls.RequireAndVerifyClientCert,
+			}
+			App.MTLSServer = &http.Server{
+				Addr:      ":" + App.Config.MTLS.Port,
+				TLSConfig: tlsConfig,
+				Handler:   mux,
+			}
+			log.Printf("I Serving MTLS on port %v", App.Config.MTLS.Port)
+			log.Fatal(App.MTLSServer.ListenAndServeTLS(App.Config.MTLS.Certificate, App.Config.MTLS.Key))
+		}
+	}
 }
