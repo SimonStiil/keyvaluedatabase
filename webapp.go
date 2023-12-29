@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net"
 	"net/http"
 	"os"
 	"reflect"
@@ -414,75 +413,6 @@ func (App *Application) BasicAuth(next http.HandlerFunc, permission *ConfigPermi
 		}
 		log.Printf("I %v %v %v %v %v %v", r.Header.Get("secret_remote_address"), username, r.Method, r.URL.Path, 401, "BasicAuthCheckFailed")
 		w.Header().Set("WWW-Authenticate", `Basic realm="restricted", charset="UTF-8"`)
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-	})
-}
-
-func (App *Application) HostBlocker(next http.HandlerFunc, permission *ConfigPermissions) http.HandlerFunc {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if len(App.Config.Hosts) == 0 {
-			next.ServeHTTP(w, r)
-			return
-		}
-		if permission == nil {
-			switch r.Method {
-			case "GET":
-				permission = &ConfigPermissions{Read: true}
-				break
-			case "POST", "PUT", "UPDATE", "PATCH", "DELETE":
-				permission = &ConfigPermissions{Write: true}
-				break
-			default:
-				permission = &ConfigPermissions{Write: true, Read: true, List: true}
-			}
-		}
-		var found bool
-		denied := false
-		address := r.Header.Get("secret_remote_address")
-		foundHeadderName := r.Header.Get("secret_remote_header")
-		for _, host := range App.Config.Hosts {
-			if !strings.Contains(host.Address, "/") {
-				if host.Address == address {
-					found = true
-					if AuthTestPermission(host.Permissions, *permission) {
-						r.Header.Set("secret_remote_address", address)
-						next.ServeHTTP(w, r)
-						return
-					} else {
-						denied = true
-						if App.Config.Debug {
-							log.Println("D HostBlocker - ", foundHeadderName, " - AuthTestPermission failed for ", host.Address)
-						}
-						break
-					}
-				}
-			}
-		}
-		if !denied {
-			for _, host := range App.Config.Hosts {
-				_, subnet, _ := net.ParseCIDR(host.Address)
-				if subnet != nil {
-					ip := net.ParseIP(address)
-					if subnet.Contains(ip) {
-						found = true
-						if AuthTestPermission(host.Permissions, *permission) {
-							r.Header.Set("secret_remote_address", address)
-							next.ServeHTTP(w, r)
-							return
-						} else {
-							if App.Config.Debug {
-								log.Println("D HostBlocker(CIDR) - ", foundHeadderName, " - AuthTestPermission failed for ", host.Address)
-							}
-						}
-					}
-
-				}
-			}
-		}
-		if !found && App.Config.Debug {
-			log.Println("D HostBlocker - ", foundHeadderName, " - Lookup Host failed for ", address)
-		}
-		log.Printf("I %v %v %v %v %v %v", address, "-", r.Method, r.URL.Path, 401, "HostCheckFailed")
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 	})
 }
