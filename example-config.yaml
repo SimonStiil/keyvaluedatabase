@@ -20,6 +20,16 @@ hosts:
     read: true # Host has Read Permission
     write: true # Host has Write Permission
     list: true # Host has List Permission
+- address: "192.168.0.1/24" # CIDR of hosts that is allowed this access
+  permissions:
+    read: true # Host has Read Permission
+    write: true # Host has Write Permission
+    list: true # Host has List Permission
+- address: "example.com" # DNS name of host that is allowed this access
+  permissions:
+    read: true # Host has Read Permission
+    write: true # Host has Write Permission
+    list: true # Host has List Permission
 redis:
   address: "127.0.0.1:6379"
   # envVariableName: # Set if different from KVDB_REDIS_PASSWORD
