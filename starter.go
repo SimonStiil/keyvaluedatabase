@@ -21,9 +21,15 @@ var (
 	test           string
 	configFileName string
 	requests       = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "http_endpoint_equests_count",
+		Name: "http_endpoint_requests_count",
 		Help: "The amount of requests to an endpoint",
 	}, []string{"endpoint", "method"},
+	)
+
+	keys = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "key_request_count",
+		Help: "The amount of requests for a certain key",
+	}, []string{"key", "method", "error"},
 	)
 )
 
@@ -153,7 +159,7 @@ func main() {
 	App.Count.Init(App.DB)
 	defer App.DB.Close()
 	greetingController := http.HandlerFunc(App.GreetingController)
-	rootController := http.HandlerFunc(App.RootController)
+	rootControllerV1 := http.HandlerFunc(App.RootControllerV1)
 	listController := http.HandlerFunc(App.ListController)
 	fullListController := http.HandlerFunc(App.FullListController)
 	healthActuator := http.HandlerFunc(App.HealthActuator)
@@ -165,7 +171,7 @@ func main() {
 	FullListPermission := &ConfigPermissions{List: true, Read: true}
 	regularServerMux := http.NewServeMux()
 	regularServerMux.HandleFunc("/system/greeting", App.GetIP(App.HostBlocker(App.BasicAuth(greetingController, nil), nil)))
-	regularServerMux.HandleFunc("/", App.GetIP(App.HostBlocker(App.BasicAuth(rootController, nil), nil)))
+	regularServerMux.HandleFunc("/", App.GetIP(App.HostBlocker(App.BasicAuth(rootControllerV1, nil), nil)))
 	regularServerMux.HandleFunc("/system/list", App.GetIP(App.HostBlocker(App.BasicAuth(listController, ListPermission), ListPermission)))
 	regularServerMux.HandleFunc("/system/fullList", App.GetIP(App.HostBlocker(App.BasicAuth(fullListController, FullListPermission), FullListPermission)))
 	regularServerMux.HandleFunc("/system/health", healthActuator)
@@ -180,7 +186,7 @@ func main() {
 	if App.Config.MTLS.Enabled {
 		mtlsServerMux := http.NewServeMux()
 		mtlsServerMux.HandleFunc("/system/greeting", App.SetMTLSUser(App.GetIP(greetingController)))
-		mtlsServerMux.HandleFunc("/", App.SetMTLSUser(App.GetIP(rootController)))
+		mtlsServerMux.HandleFunc("/", App.SetMTLSUser(App.GetIP(rootControllerV1)))
 		mtlsServerMux.HandleFunc("/system/list", App.SetMTLSUser(App.GetIP(listController)))
 		mtlsServerMux.HandleFunc("/system/fullList", App.SetMTLSUser(App.GetIP(fullListController)))
 		mtlsServerMux.HandleFunc("/system/health", App.SetMTLSUser(App.GetIP(healthActuator)))

@@ -7,8 +7,15 @@ type KVPairV1 struct {
 
 type KVUpdateV1 struct {
 	Key  string `json:"key"`
-	Type string `json:"type"`
+	Type Type   `json:"type"`
 }
+
+type Type string
+
+const (
+	TypeRoll     Type = "roll"
+	TypeGenerate Type = "generate"
+)
 
 type GreetingV1 struct {
 	Id      uint32 `json:"id"`

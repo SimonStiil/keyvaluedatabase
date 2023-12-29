@@ -52,7 +52,7 @@ func (App *Application) GreetingController(w http.ResponseWriter, r *http.Reques
 
 var decoder = schema.NewDecoder()
 
-func (App *Application) RootController(w http.ResponseWriter, r *http.Request) {
+func (App *Application) RootControllerV1(w http.ResponseWriter, r *http.Request) {
 	requests.WithLabelValues(r.URL.EscapedPath(), r.Method).Inc()
 	//https://stackoverflow.com/questions/64437991/prevent-http-handlefunc-funcw-r-handler-being-called-for-all-unmatc
 	slashSeperated := strings.Split(r.URL.Path[1:], "/")
@@ -74,6 +74,7 @@ func (App *Application) RootController(w http.ResponseWriter, r *http.Request) {
 		data := rest.KVPairV1{Key: key}
 		if data.Key == "" {
 			if !App.decodeAny(w, r, &data) {
+				keys.WithLabelValues(key, "GET", "DecodeError").Inc()
 				return
 			}
 		}
@@ -81,6 +82,7 @@ func (App *Application) RootController(w http.ResponseWriter, r *http.Request) {
 			log.Printf("D %d %v key: %v Value: %v\n", id, method, data.Key, data.Value)
 		}
 		if data.Key == "" {
+			keys.WithLabelValues(key, "GET", "NotFound").Inc()
 			http.NotFoundHandler().ServeHTTP(w, r)
 			return
 		}
@@ -89,10 +91,12 @@ func (App *Application) RootController(w http.ResponseWriter, r *http.Request) {
 			log.Printf("D %d value(%v): %v\n", id, ok, value)
 		}
 		if !ok {
+			keys.WithLabelValues(key, "GET", "NotFound").Inc()
 			http.NotFoundHandler().ServeHTTP(w, r)
 			return
 		}
 		reply := rest.KVPairV1{Key: key, Value: value}
+		keys.WithLabelValues(key, "GET", "OK").Inc()
 		log.Printf("I %v %v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 200, data.Key)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(reply)
@@ -100,12 +104,14 @@ func (App *Application) RootController(w http.ResponseWriter, r *http.Request) {
 	case "POST":
 		data := rest.KVPairV1{Key: key}
 		if !App.decodeAny(w, r, &data) {
+			keys.WithLabelValues(key, "POST", "DecodeError").Inc()
 			return
 		}
 		if App.Config.Debug {
 			log.Printf("D %d %v key: %v Value: %v\n", id, method, data.Key, data.Value)
 		}
 		if key != "" && key != data.Key {
+			keys.WithLabelValues(key, "POST", "BadRequest").Inc()
 			App.BadRequestHandler().ServeHTTP(w, r)
 			return
 		}
@@ -115,9 +121,11 @@ func (App *Application) RootController(w http.ResponseWriter, r *http.Request) {
 			log.Printf("D %d value(%v): %v\n", id, ok, value)
 		}
 		if !ok {
+			keys.WithLabelValues(key, "POST", "NotFound").Inc()
 			http.NotFoundHandler().ServeHTTP(w, r)
 			return
 		}
+		keys.WithLabelValues(key, "POST", "OK").Inc()
 		log.Printf("I %v %v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 201, data.Key)
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusCreated)
@@ -126,6 +134,7 @@ func (App *Application) RootController(w http.ResponseWriter, r *http.Request) {
 
 	case "PUT":
 		if key == "" {
+			keys.WithLabelValues(key, "PUT", "BadRequest").Inc()
 			http.NotFoundHandler().ServeHTTP(w, r)
 			return
 		}
@@ -135,6 +144,7 @@ func (App *Application) RootController(w http.ResponseWriter, r *http.Request) {
 		if r.Body != nil {
 			bodyBytes, err = io.ReadAll(r.Body)
 			if err != nil {
+				keys.WithLabelValues(key, "PUT", "DecodeError").Inc()
 				fmt.Printf("Body reading error: %v", err)
 				return
 			}
@@ -149,9 +159,11 @@ func (App *Application) RootController(w http.ResponseWriter, r *http.Request) {
 			log.Printf("D %d value(%v): %v\n", id, ok, value)
 		}
 		if !ok {
+			keys.WithLabelValues(key, "NotFound", "OK").Inc()
 			http.NotFoundHandler().ServeHTTP(w, r)
 			return
 		}
+		keys.WithLabelValues(key, "PUT", "OK").Inc()
 		log.Printf("I %v %v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 201, key)
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusCreated)
@@ -161,12 +173,14 @@ func (App *Application) RootController(w http.ResponseWriter, r *http.Request) {
 		data := rest.KVUpdateV1{Key: key}
 		var newData rest.KVPairV1
 		if !App.decodeAny(w, r, &data) {
+			keys.WithLabelValues(key, "UPDATE", "DecodeError").Inc()
 			return
 		}
 		if App.Config.Debug {
 			log.Printf("D %d %v key: %v Type: %v\n", id, method, data.Key, data.Type)
 		}
 		if key != "" && key != data.Key {
+			keys.WithLabelValues(key, "UPDATE", "BadRequest").Inc()
 			App.BadRequestHandler().ServeHTTP(w, r)
 			return
 		}
@@ -180,33 +194,37 @@ func (App *Application) RootController(w http.ResponseWriter, r *http.Request) {
 			log.Printf("D %d value(%v): %v\n", id, newData.Key, newData.Value)
 		}
 		_, exists := App.DB.Get(data.Key)
-		if data.Type == "roll" && exists {
+		if data.Type == rest.TypeRoll && exists {
 			App.DB.Set(newData.Key, newData.Value)
+			keys.WithLabelValues(key, "ROLL", "OK").Inc()
 			log.Printf("I %v %v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 200, data.Key)
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(newData)
 
 			if App.Config.Debug {
-				log.Printf("D %d value roll\n", id)
+				log.Printf("D %d value %v\n", id, rest.TypeRoll)
 			}
 			return
 		}
-		if data.Type == "generate" && !exists {
+		if data.Type == rest.TypeGenerate && !exists {
 			App.DB.Set(newData.Key, newData.Value)
+			keys.WithLabelValues(key, "GENERATE", "OK").Inc()
 			log.Printf("I %v %v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 200, data.Key)
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(newData)
 			if App.Config.Debug {
-				log.Printf("D %d value generate\n", id)
+				log.Printf("D %d value %v\n", id, rest.TypeGenerate)
 			}
 			return
 		}
+		keys.WithLabelValues(key, "UPDATE", "BadRequest").Inc()
 		App.BadRequestHandler().ServeHTTP(w, r)
 		return
 	case "DELETE":
 		data := rest.KVPairV1{Key: key}
 		if data.Key == "" {
 			if !App.decodeAny(w, r, &data) {
+				keys.WithLabelValues(key, "DELETE", "DecodeError").Inc()
 				return
 			}
 		}
@@ -214,6 +232,7 @@ func (App *Application) RootController(w http.ResponseWriter, r *http.Request) {
 			log.Printf("D %d %v key: %v Value: %v\n", id, method, data.Key, data.Value)
 		}
 		App.DB.Delete(data.Key)
+		keys.WithLabelValues(key, "DELETE", "OK").Inc()
 		log.Printf("I %v %v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 201, data.Key)
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusCreated)

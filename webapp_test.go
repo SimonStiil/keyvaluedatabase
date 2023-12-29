@@ -82,7 +82,7 @@ func TestGETGreeting(t *testing.T) {
 		request.Header.Set("Content-Type", "application/json")
 		response := httptest.NewRecorder()
 
-		app.RootController(response, request)
+		app.RootControllerV1(response, request)
 		b, err := io.ReadAll(response.Body)
 		if err != nil {
 			t.Errorf("Error Reading body %v", err)
@@ -104,7 +104,7 @@ func TestGETGreeting(t *testing.T) {
 		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		response := httptest.NewRecorder()
 
-		app.RootController(response, request)
+		app.RootControllerV1(response, request)
 		b, err := io.ReadAll(response.Body)
 		if err != nil {
 			t.Errorf("Error Reading body %v", err)
@@ -125,7 +125,7 @@ func TestGETGreeting(t *testing.T) {
 		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		response := httptest.NewRecorder()
 
-		app.RootController(response, request)
+		app.RootControllerV1(response, request)
 		b, err := io.ReadAll(response.Body)
 		if err != nil {
 			t.Errorf("Error Reading body %v", err)
@@ -146,7 +146,7 @@ func TestGETGreeting(t *testing.T) {
 		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		response := httptest.NewRecorder()
 
-		app.RootController(response, request)
+		app.RootControllerV1(response, request)
 		b, err := io.ReadAll(response.Body)
 		if err != nil {
 			t.Errorf("Error Reading body %v", err)
@@ -185,7 +185,7 @@ func TestGETGreeting(t *testing.T) {
 		request, _ := http.NewRequest(http.MethodGet, "/"+testData.Key, nil)
 		response := httptest.NewRecorder()
 
-		app.RootController(response, request)
+		app.RootControllerV1(response, request)
 		if response.Code != http.StatusOK {
 			t.Errorf(".Code got %q, want %q", response.Code, http.StatusOK)
 		}
@@ -206,7 +206,7 @@ func TestGETGreeting(t *testing.T) {
 		request, _ := http.NewRequest(http.MethodGet, "/fake", nil)
 		response := httptest.NewRecorder()
 
-		app.RootController(response, request)
+		app.RootControllerV1(response, request)
 		if response.Code != http.StatusNotFound {
 			t.Errorf(".Code got %v, want %v", response.Code, http.StatusNotFound)
 		}
