@@ -8,10 +8,11 @@ import (
 )
 
 type Counter struct {
-	Mutex  sync.Mutex
-	Value  uint32
-	Config *ConfigType
-	DB     Database
+	Mutex   sync.Mutex
+	Value   uint32
+	Config  *ConfigType
+	DB      Database
+	testing bool
 }
 
 func (Count *Counter) Init(DB Database) {
@@ -49,7 +50,7 @@ func (Count *Counter) GetCount() uint32 {
 	if Count.DB != nil && Count.DB.IsInitialized() {
 		Count.DB.Set("counter", Count.Value)
 	} else {
-		if Count.Config.Debug {
+		if !Count.testing && Count.Config.Debug {
 			log.Println("D getCount db.isInitialized not true")
 		}
 	}

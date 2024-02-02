@@ -14,7 +14,7 @@ func Test_testHosts(t *testing.T) {
 	HCT.App.Config = ConfigType{Hosts: []ConfigHosts{
 		{Address: "192.168.0.1", Permissions: ConfigPermissions{Read: true, Write: true, List: true}},
 		{Address: "192.168.0.1/24", Permissions: ConfigPermissions{Read: true, Write: false, List: false}},
-		{Address: "youtube.com", Permissions: ConfigPermissions{Read: true, Write: true, List: true}},
+		{Address: "example.com", Permissions: ConfigPermissions{Read: true, Write: true, List: true}},
 		{Address: "hello.world", Permissions: ConfigPermissions{Read: true, Write: true, List: true}},
 	}}
 	CPAll := ConfigPermissions{Read: true, Write: true, List: true}
@@ -39,15 +39,8 @@ func Test_testHosts(t *testing.T) {
 			t.Errorf("failed for host %v", ip)
 		}
 	})
-	// Youtube IP's based on nslookup youtube.com
-	ip = "142.250.147.190"
-	t.Run(fmt.Sprintf("DNS for ip %s", ip), func(t *testing.T) {
-		allowed, _ := HCT.App.testhost(ip, &CPAll)
-		if !allowed {
-			t.Errorf("failed for host %v", ip)
-		}
-	})
-	ip = "142.250.147.91"
+	// example.com IP's based on nslookup example.com
+	ip = "93.184.216.34"
 	t.Run(fmt.Sprintf("DNS for ip %s", ip), func(t *testing.T) {
 		allowed, _ := HCT.App.testhost(ip, &CPAll)
 		if !allowed {
