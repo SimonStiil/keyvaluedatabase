@@ -9,7 +9,7 @@ podTemplate(yaml: '''
     spec:
       containers:
       - name: kaniko
-        image: gcr.io/kaniko-project/executor:debug
+        image: gcr.io/kaniko-project/executor:v1.20.0-debug
         command:
         - sleep
         args: 
@@ -18,12 +18,14 @@ podTemplate(yaml: '''
         - name: kaniko-secret
           mountPath: /kaniko/.docker
       - name: golang
-        image: golang:alpine
+        image: golang:1.21.6-alpine3.19
         command:
         - sleep
         args: 
         - 99d
       restartPolicy: Never
+      nodeSelector: 
+        kubernetes.io/arch: amd64
       volumes:
       - name: kaniko-secret
         secret:
@@ -40,7 +42,6 @@ podTemplate(yaml: '''
       gitCommitMessage = sh(returnStdout: true, script: "git log --format=%B -n 1 ${scmData.GIT_COMMIT}").trim()
       gitMap = scmGetOrgRepo scmData.GIT_URL
       githubWebhookManager gitMap: gitMap, webhookTokenId: 'jenkins-webhook-repo-cleanup'
-      // Non importaint comment
     }
     container('golang') {
       stage('UnitTests') {
@@ -75,6 +76,7 @@ podTemplate(yaml: '''
             } else {
               sh '''
                 /kaniko/executor --force --context `pwd` --log-format text --destination $PACKAGE_DESTINATION/$PACKAGE_NAME:$BRANCH_NAME --label org.opencontainers.image.description="Build based on $PACKAGE_CONTAINER_SOURCE/commit/$GIT_COMMIT" --label org.opencontainers.image.revision=$GIT_COMMIT --label org.opencontainers.image.version=$GIT_BRANCH
+
               '''
             }
           }
