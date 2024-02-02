@@ -5,7 +5,18 @@ type KVPairV1 struct {
 	Value string `json:"value"`
 }
 
+type KVPairV2 struct {
+	Key    string `json:"key"`
+	Value  string `json:"value"`
+	Public bool   `json:"public"`
+}
+
 type KVUpdateV1 struct {
+	Key  string `json:"key"`
+	Type Type   `json:"type"`
+}
+
+type KVUpdateV2 struct {
 	Key  string `json:"key"`
 	Type Type   `json:"type"`
 }
@@ -15,6 +26,7 @@ type Type string
 const (
 	TypeRoll     Type = "roll"
 	TypeGenerate Type = "generate"
+	Publish      Type = "publish"
 )
 
 type GreetingV1 struct {

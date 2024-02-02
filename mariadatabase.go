@@ -28,6 +28,7 @@ type ConfigMysql struct {
 	EnvVariableName string `mapstructure:"envVariableName"`
 	KeyName         string `mapstructure:"keyName"`
 	ValueName       string `mapstructure:"valueName"`
+	PublicName      string `mapstructure:"publicName"`
 }
 
 func MariaDBGetDefaults(configReader *viper.Viper) {
@@ -38,7 +39,7 @@ func MariaDBGetDefaults(configReader *viper.Viper) {
 	configReader.SetDefault("mysql.envVariableName", BaseENVname+"_MYSQL_PASSWORD")
 	configReader.SetDefault("mysql.keyName", "key")
 	configReader.SetDefault("mysql.valueName", "value")
-	configReader.SetDefault("mysql.valueName", "value")
+	configReader.SetDefault("mysql.publicName", "public")
 }
 
 func (MDB *MariaDatabase) Init() {
@@ -59,24 +60,31 @@ func (MDB *MariaDatabase) Init() {
 	}
 	MDB.Connection, err = sql.Open("mysql", connectionString)
 	if err != nil {
-		panic(err.Error())
+		panic(err)
 	}
-	MDB.Connection.Exec(fmt.Sprintf("CREATE TABLE IF NOT EXISTS `%v` ( `%v` CHAR(32) PRIMARY KEY, `%v` VARCHAR(21800) NOT NULL) ENGINE = InnoDB; ", MDB.Config.Mysql.TableName, MDB.Config.Mysql.KeyName, MDB.Config.Mysql.ValueName))
+	_, err = MDB.Connection.Exec(fmt.Sprintf("CREATE TABLE IF NOT EXISTS `%v` ( `%v` CHAR(32) PRIMARY KEY, `%v` VARCHAR(21800) NOT NULL) ENGINE = InnoDB; ", MDB.Config.Mysql.TableName, MDB.Config.Mysql.KeyName, MDB.Config.Mysql.ValueName))
+	if err != nil {
+		panic(err)
+	}
+	_, err = MDB.Connection.Exec(fmt.Sprintf("ALTER TABLE `%v` ADD IF NOT EXISTS `%v` BOOLEAN NOT NULL DEFAULT 0", MDB.Config.Mysql.TableName, MDB.Config.Mysql.PublicName))
+	if err != nil {
+		panic(err)
+	}
 	if MDB.Config.Debug {
 		log.Println("D db.init - complete")
 	}
 	MDB.Initialized = true
 }
 
-func (MDB *MariaDatabase) Set(key string, value interface{}) {
+func (MDB *MariaDatabase) Set(key string, value interface{}, public bool) {
 	if !MDB.Initialized {
 		panic("F Unable to set. db not initialized()")
 	}
-	statement, err := MDB.Connection.Prepare(fmt.Sprintf("INSERT INTO `%v` (`%v`, `%v`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `%v`=?", MDB.Config.Mysql.TableName, MDB.Config.Mysql.KeyName, MDB.Config.Mysql.ValueName, MDB.Config.Mysql.ValueName))
+	statement, err := MDB.Connection.Prepare(fmt.Sprintf("INSERT INTO `%v` (`%v`, `%v`, `%v`) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE `%v`=?, `%v`=?", MDB.Config.Mysql.TableName, MDB.Config.Mysql.KeyName, MDB.Config.Mysql.ValueName, MDB.Config.Mysql.PublicName, MDB.Config.Mysql.ValueName, MDB.Config.Mysql.PublicName))
 	if err != nil {
 		panic(err)
 	}
-	_, err = statement.Exec(key, value, value)
+	_, err = statement.Exec(key, value, public, value, public)
 	if err != nil {
 		panic(err)
 	}
@@ -91,10 +99,10 @@ func (MDB *MariaDatabase) Get(key string) (string, bool) {
 		log.Fatal(err)
 	}
 	defer rows.Close()
-	var kvpair rest.KVPairV1
+	var kvpair rest.KVPairV2
 	found := false
 	for rows.Next() {
-		err = rows.Scan(&kvpair.Key, &kvpair.Value)
+		err = rows.Scan(&kvpair.Key, &kvpair.Value, &kvpair.Public)
 		if err != nil {
 			log.Fatal(err)
 		}
