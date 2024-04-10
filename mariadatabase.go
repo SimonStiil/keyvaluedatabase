@@ -60,7 +60,7 @@ func (MDB *MariaDatabase) Init() {
 	if err != nil {
 		panic(err.Error())
 	}
-	_, err = MDB.Connection.Exec(fmt.Sprintf("CREATE TABLE IF NOT EXISTS `%v` ( `%v` CHAR(32) PRIMARY KEY, `%v` VARCHAR(21800) NOT NULL) ENGINE = InnoDB; ", MDB.Config.Mysql.TableName, MDB.Config.Mysql.KeyName, MDB.Config.Mysql.ValueName))
+	_, err = MDB.Connection.Exec(fmt.Sprintf("CREATE TABLE IF NOT EXISTS `%v` ( `%v` CHAR(32) PRIMARY KEY, `%v` VARCHAR(16000) NOT NULL) ENGINE = InnoDB; ", MDB.Config.Mysql.TableName, MDB.Config.Mysql.KeyName, MDB.Config.Mysql.ValueName))
 	if err != nil {
 		panic(err.Error())
 	}
