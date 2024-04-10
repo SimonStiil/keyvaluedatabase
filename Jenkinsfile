@@ -34,7 +34,7 @@ def template = '''
           - name: MARIADB_PASSWORD
             value: "TEMPORARY_FAKE_PASSWORD"
           - name: MARIADB_DATABASE
-            value: "kvdb"
+            value: "kvdb-test"
           - name: MARIADB_ROOT_PASSWORD
             value: "TEMPORARY_FAKE_ROOT_PASSWORD"
         ports:
@@ -67,7 +67,7 @@ podTemplate(yaml: template) {
       stage('UnitTests') {
         withEnv(['CGO_ENABLED=0', 'GOOS=linux', 'GOARCH=amd64', 'KVDB_DATABASETYPE=mysql', "KVDB_MYSQL_PASSWORD=${testpassword}"]) {
           sh '''
-            KVDB_DATABASETYPE=mysql go test . -v 
+            go test . -v 
           '''
         }
       }
