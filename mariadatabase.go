@@ -38,7 +38,6 @@ func MariaDBGetDefaults(configReader *viper.Viper) {
 	configReader.SetDefault("mysql.envVariableName", BaseENVname+"_MYSQL_PASSWORD")
 	configReader.SetDefault("mysql.keyName", "key")
 	configReader.SetDefault("mysql.valueName", "value")
-	configReader.SetDefault("mysql.valueName", "value")
 }
 
 func (MDB *MariaDatabase) Init() {
