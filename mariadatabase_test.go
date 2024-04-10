@@ -12,6 +12,7 @@ type MariaDBTest struct {
 func Test_Maria_DB(t *testing.T) {
 	dbt := new(MariaDBTest)
 	ConfigRead("example-config", &dbt.Config)
+	dbt.Config.Debug = true
 	if dbt.Config.DatabaseType != "mysql" {
 		t.Log("no MySQL configuration in test config. Skipping test")
 		return

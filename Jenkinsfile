@@ -3,7 +3,10 @@ properties([disableConcurrentBuilds(), buildDiscarder(logRotator(artifactDaysToK
 @Library('pipeline-library')
 import dk.stiil.pipeline.Constants
 
-podTemplate(yaml: '''
+String testpassword = generateAplhaNumericString( 16 )
+String rootpassword = generateAplhaNumericString( 16 )
+
+def template = '''
     apiVersion: v1
     kind: Pod
     spec:
@@ -23,6 +26,19 @@ podTemplate(yaml: '''
         - sleep
         args: 
         - 99d
+      - name: mariadb
+        image: mariadb:11.3.2-jammy
+        env:
+          - name: MARIADB_USER
+            value: "kvdb"
+          - name: MARIADB_PASSWORD
+            value: "TEMPORARY_FAKE_PASSWORD"
+          - name: MARIADB_DATABASE
+            value: "kvdb-test"
+          - name: MARIADB_ROOT_PASSWORD
+            value: "TEMPORARY_FAKE_ROOT_PASSWORD"
+        ports:
+          - containerPort: 3306
       restartPolicy: Never
       nodeSelector: 
         kubernetes.io/arch: amd64
@@ -33,7 +49,10 @@ podTemplate(yaml: '''
           items:
           - key: .dockerconfigjson
             path: config.json
-''') {
+'''
+template = template.replaceAll("TEMPORARY_FAKE_PASSWORD",testpassword).replaceAll("TEMPORARY_FAKE_ROOT_PASSWORD",rootpassword)
+
+podTemplate(yaml: template) {
   node(POD_LABEL) {
     TreeMap scmData
     String gitCommitMessage
@@ -43,11 +62,12 @@ podTemplate(yaml: '''
       gitMap = scmGetOrgRepo scmData.GIT_URL
       githubWebhookManager gitMap: gitMap, webhookTokenId: 'jenkins-webhook-repo-cleanup'
     }
+
     container('golang') {
       stage('UnitTests') {
-        withEnv(['CGO_ENABLED=0', 'GOOS=linux', 'GOARCH=amd64']) {
+        withEnv(['CGO_ENABLED=0', 'GOOS=linux', 'GOARCH=amd64', 'KVDB_DATABASETYPE=mysql', "KVDB_MYSQL_PASSWORD=${testpassword}"]) {
           sh '''
-            go test .
+            go test . -v 
           '''
         }
       }
