@@ -6,7 +6,6 @@ import (
 	"crypto/subtle"
 	b64 "encoding/base64"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -24,6 +23,8 @@ type Auth struct {
 	}
 }
 
+// https://www.alexedwards.net/blog/basic-authentication-in-go
+// https://medium.com/@matryer/the-http-handler-wrapper-technique-in-golang-updated-bc7fbcffa702
 func (Auth *Auth) Authentication(r *RequestParameters) {
 	user, ok := Auth.Users[r.Basic.Username]
 	if ok {
@@ -53,17 +54,14 @@ func (User *User) Autorization(r *RequestParameters, permissions ConfigPermissio
 	}
 }
 
-func (Auth *Auth) ServeAuthFailed(w http.ResponseWriter, r *RequestParameters) {
-	log.Printf("I %v %v %v %v %v", r.RequestIP, r.Basic.Username, r.Method, r.orgRequest.URL.Path, 403)
+func (Auth *Auth) ServeAuthFailed(w http.ResponseWriter, request *RequestParameters) {
+	logger.Info("Auth Failed",
+		"function", "ServeAuthFailed", "struct", "Auth",
+		"id", request.ID, "address", request.RequestIP,
+		"user", request.GetUserName(), "method", request.Method,
+		"path", request.orgRequest.URL.EscapedPath(), "namespace", request.Namespace, "status", 403)
 	w.Header().Set("WWW-Authenticate", `Basic realm="restricted", charset="UTF-8"`)
 	http.Error(w, "Unauthorized", http.StatusUnauthorized)
-}
-func (App *Application) BadRequestHandler(w http.ResponseWriter, r *RequestParameters) {
-	log.Printf("I %v %v %v %v %v", r.RequestIP, r.GetUserName(), r.Method, r.orgRequest.URL.Path, 400)
-	w.Header().Set("Content-Type", "text/html")
-	w.WriteHeader(http.StatusBadRequest)
-	w.Write([]byte("400 Bad Request"))
-	return
 }
 
 func (Auth *Auth) GetIPHeaderFromRequest(r *http.Request) (string, string) {
@@ -225,9 +223,9 @@ func AuthUnpack(Data ConfigUser) User {
 	}
 */
 func AuthTestPermission(permission ConfigPermissions, expected ConfigPermissions) bool {
-	return ((expected.Read == false || permission.Read) &&
-		(expected.Write == false || permission.Write) &&
-		(expected.List == false || permission.List))
+	return ((!expected.Read || permission.Read) &&
+		(!expected.Write || permission.Write) &&
+		(!expected.List || permission.List))
 }
 
 const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"

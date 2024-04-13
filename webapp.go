@@ -27,226 +27,16 @@ type Application struct {
 	MTLSServer *http.Server
 }
 
-func (App *Application) GreetingController(w http.ResponseWriter, r *http.Request) {
-	requests.WithLabelValues(r.URL.EscapedPath(), r.Method).Inc()
-	//https://stackoverflow.com/questions/64437991/prevent-http-handlefunc-funcw-r-handler-being-called-for-all-unmatc
-	if !(r.URL.Path == "/system/greeting") {
-		log.Printf("I %v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 404)
-		http.NotFoundHandler().ServeHTTP(w, r)
-		return
-	}
-	log.Println("I Greetings-check")
-	name := "World!"
-	val := r.URL.Query()["name"]
-	if len(val) > 0 {
-		name = val[0]
-	}
-	reply := rest.GreetingV1{Id: App.Count.GetCount(), Content: "Hello, " + name}
-	log.Printf("I %v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 200)
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(reply)
-	return
-}
-
 var decoder = schema.NewDecoder()
 
 func (App *Application) RootControllerV1(w http.ResponseWriter, r *http.Request) {
-	requests.WithLabelValues(r.URL.EscapedPath(), r.Method).Inc()
-	//https://stackoverflow.com/questions/64437991/prevent-http-handlefunc-funcw-r-handler-being-called-for-all-unmatc
-	slashSeperated := strings.Split(r.URL.Path[1:], "/")
-	key := slashSeperated[0]
-	method := r.Method
-	slashes := strings.Count(r.URL.Path, "/")
-	id := App.Count.GetCount()
-	if App.Config.Debug {
-		log.Printf("D %d RootController %v %v %v\n", id, method, key, slashes)
-	}
-	if len(slashSeperated) > 1 {
-		log.Printf("I %v %v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 404, "ToManySlashes")
-		http.NotFoundHandler().ServeHTTP(w, r)
-		return
-	}
-
-	switch method {
-	case "GET":
-		data := rest.KVPairV1{Key: key}
-		if data.Key == "" {
-			if !App.decodeAny(w, r, &data) {
-				keys.WithLabelValues(key, "GET", "DecodeError").Inc()
-				return
-			}
-		}
-		if App.Config.Debug {
-			log.Printf("D %d %v key: %v Value: %v\n", id, method, data.Key, data.Value)
-		}
-		if data.Key == "" {
-			keys.WithLabelValues(key, "GET", "NotFound").Inc()
-			http.NotFoundHandler().ServeHTTP(w, r)
-			return
-		}
-		value, ok := App.DB.Get(key)
-		if App.Config.Debug {
-			log.Printf("D %d value(%v): %v\n", id, ok, value)
-		}
-		if !ok {
-			keys.WithLabelValues(key, "GET", "NotFound").Inc()
-			http.NotFoundHandler().ServeHTTP(w, r)
-			return
-		}
-		reply := rest.KVPairV1{Key: key, Value: value}
-		keys.WithLabelValues(key, "GET", "OK").Inc()
-		log.Printf("I %v %v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 200, data.Key)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(reply)
-		return
-	case "POST":
-		data := rest.KVPairV1{Key: key}
-		if !App.decodeAny(w, r, &data) {
-			keys.WithLabelValues(key, "POST", "DecodeError").Inc()
-			return
-		}
-		if App.Config.Debug {
-			log.Printf("D %d %v key: %v Value: %v\n", id, method, data.Key, data.Value)
-		}
-		if key != "" && key != data.Key {
-			keys.WithLabelValues(key, "POST", "BadRequest").Inc()
-			App.BadRequestHandler().ServeHTTP(w, r)
-			return
-		}
-		App.DB.Set(data.Key, data.Value)
-		value, ok := App.DB.Get(data.Key)
-		if App.Config.Debug {
-			log.Printf("D %d value(%v): %v\n", id, ok, value)
-		}
-		if !ok {
-			keys.WithLabelValues(key, "POST", "NotFound").Inc()
-			http.NotFoundHandler().ServeHTTP(w, r)
-			return
-		}
-		keys.WithLabelValues(key, "POST", "OK").Inc()
-		log.Printf("I %v %v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 201, data.Key)
-		w.Header().Set("Content-Type", "text/html")
-		w.WriteHeader(http.StatusCreated)
-		w.Write([]byte("OK"))
-		return
-
-	case "PUT":
-		if key == "" {
-			keys.WithLabelValues(key, "PUT", "BadRequest").Inc()
-			http.NotFoundHandler().ServeHTTP(w, r)
-			return
-		}
-		contenttype := r.Header.Get("Content-Type")
-		var bodyBytes []byte
-		var err error
-		if r.Body != nil {
-			bodyBytes, err = io.ReadAll(r.Body)
-			if err != nil {
-				keys.WithLabelValues(key, "PUT", "DecodeError").Inc()
-				fmt.Printf("Body reading error: %v", err)
-				return
-			}
-			defer r.Body.Close()
-		}
-		if App.Config.Debug {
-			log.Printf("D %d %v key: %v Content-Type: %v Length %v(%v)\n", id, method, key, contenttype, len(bodyBytes), r.ContentLength)
-		}
-		App.DB.Set(key, string(bodyBytes))
-		value, ok := App.DB.Get(key)
-		if App.Config.Debug {
-			log.Printf("D %d value(%v): %v\n", id, ok, value)
-		}
-		if !ok {
-			keys.WithLabelValues(key, "NotFound", "OK").Inc()
-			http.NotFoundHandler().ServeHTTP(w, r)
-			return
-		}
-		keys.WithLabelValues(key, "PUT", "OK").Inc()
-		log.Printf("I %v %v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 201, key)
-		w.Header().Set("Content-Type", "text/html")
-		w.WriteHeader(http.StatusCreated)
-		w.Write([]byte("OK"))
-		return
-	case "UPDATE", "PATCH":
-		data := rest.KVUpdateV1{Key: key}
-		var newData rest.KVPairV1
-		if !App.decodeAny(w, r, &data) {
-			keys.WithLabelValues(key, "UPDATE", "DecodeError").Inc()
-			return
-		}
-		if App.Config.Debug {
-			log.Printf("D %d %v key: %v Type: %v\n", id, method, data.Key, data.Type)
-		}
-		if key != "" && key != data.Key {
-			keys.WithLabelValues(key, "UPDATE", "BadRequest").Inc()
-			App.BadRequestHandler().ServeHTTP(w, r)
-			return
-		}
-		if data.Key == "" {
-			newData.Key = AuthGenerateRandomString(16)
-		} else {
-			newData.Key = data.Key
-		}
-		newData.Value = AuthGenerateRandomString(32)
-		if App.Config.Debug {
-			log.Printf("D %d value(%v): %v\n", id, newData.Key, newData.Value)
-		}
-		_, exists := App.DB.Get(data.Key)
-		if data.Type == rest.TypeRoll && exists {
-			App.DB.Set(newData.Key, newData.Value)
-			keys.WithLabelValues(key, "ROLL", "OK").Inc()
-			log.Printf("I %v %v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 200, data.Key)
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(newData)
-
-			if App.Config.Debug {
-				log.Printf("D %d value %v\n", id, rest.TypeRoll)
-			}
-			return
-		}
-		if data.Type == rest.TypeGenerate && !exists {
-			App.DB.Set(newData.Key, newData.Value)
-			keys.WithLabelValues(key, "GENERATE", "OK").Inc()
-			log.Printf("I %v %v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 200, data.Key)
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(newData)
-			if App.Config.Debug {
-				log.Printf("D %d value %v\n", id, rest.TypeGenerate)
-			}
-			return
-		}
-		keys.WithLabelValues(key, "UPDATE", "BadRequest").Inc()
-		App.BadRequestHandler().ServeHTTP(w, r)
-		return
-	case "DELETE":
-		data := rest.KVPairV1{Key: key}
-		if data.Key == "" {
-			if !App.decodeAny(w, r, &data) {
-				keys.WithLabelValues(key, "DELETE", "DecodeError").Inc()
-				return
-			}
-		}
-		if App.Config.Debug {
-			log.Printf("D %d %v key: %v Value: %v\n", id, method, data.Key, data.Value)
-		}
-		App.DB.Delete(data.Key)
-		keys.WithLabelValues(key, "DELETE", "OK").Inc()
-		log.Printf("I %v %v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 201, data.Key)
-		w.Header().Set("Content-Type", "text/html")
-		w.WriteHeader(http.StatusCreated)
-		w.Write([]byte("OK"))
-		return
-	default:
-		http.NotFoundHandler().ServeHTTP(w, r)
-		return
-	}
 
 }
 
-func (App *Application) decodeAny(w http.ResponseWriter, r *http.Request, data any) bool {
+func (App *Application) decodeAny(r *http.Request, data any) error {
 	contentType := r.Header.Get("Content-Type")
 	if contentType == "" && r.ContentLength == 0 {
-		return true
+		return nil
 	}
 
 	switch contentType {
@@ -255,134 +45,61 @@ func (App *Application) decodeAny(w http.ResponseWriter, r *http.Request, data a
 		if r.Body != nil {
 			bodyBytes, err := io.ReadAll(r.Body)
 			if err != nil {
-				fmt.Printf("E Body reading error: %v", err)
-				return false
+				logger.Debug("ReadAll error", "function", "decodeAny", "struct", "Application", "contentType", contentType, "error", err)
+				return err
 			}
 			defer r.Body.Close()
 			body := string(bodyBytes)
-			if strings.Contains(body, "key=") || strings.Contains(body, "key=") {
-				return App.decodeXWWWForm(w, r, data)
+			if strings.Contains(body, "key=") || strings.Contains(body, "value=") {
+				return App.decodeXWWWForm(r, data)
 			}
-			construct := data.(*rest.KVPairV1)
+			construct := data.(*rest.KVPairV2)
 			construct.Value = body
-			return true
+			return nil
 		}
 	case "application/json":
-		return App.decodeJson(w, r, data)
+		return App.decodeJson(r, data)
 	}
-	if App.Config.Debug {
-		log.Printf("D Unknown Content-Type: %+v\n", contentType)
-	}
-	return false
+	logger.Debug("Unknown contenttype", "function", "decodeAny", "struct", "Application", "contentType", contentType)
+	return fmt.Errorf("unknown Content-Type: %v", contentType)
 }
 
-func (App *Application) decodeJson(w http.ResponseWriter, r *http.Request, data any) bool {
-	status := true
+func (App *Application) decodeJson(r *http.Request, data any) error {
+	var err error
 	defer func() {
 		if rec := recover(); rec != nil {
-			if App.Config.Debug {
-				log.Printf("D Panic: %+v\n", rec)
-			}
-			App.BadRequestHandler().ServeHTTP(w, r)
-			status = false
+			logger.Debug("json Decode Panic error", "function", "decodeXWWWForm", "struct", "Application", "error", rec)
+			err = fmt.Errorf("%+v", rec)
 		}
 	}()
 	json.NewDecoder(r.Body).Decode(data)
-	return status
+	return err
 }
 
-func (App *Application) decodeXWWWForm(w http.ResponseWriter, r *http.Request, data any) bool {
+func (App *Application) decodeXWWWForm(r *http.Request, data any) error {
 	err := r.ParseForm()
 	if err != nil {
-		if App.Config.Debug {
-			log.Printf("D ParseForm: %v, %t\n", err, err)
-		}
-		App.BadRequestHandler().ServeHTTP(w, r)
-		return false
+		logger.Debug("ParseForm error", "function", "decodeXWWWForm", "struct", "Application", "error", err)
+		return err
 	}
-	if App.Config.Debug {
-		log.Printf("D ParseForm(PostForm): %v\n", r.PostForm)
-	}
+	logger.Debug(fmt.Sprintf("ParseForm PostForm: %+v", r.PostForm), "function", "decodeXWWWForm", "struct", "Application")
 	err = decoder.Decode(data, r.PostForm)
 	if err != nil {
-		if App.Config.Debug {
-			log.Printf("D ParseForm(Decode): %v, %v\n", err, err.Error())
-		}
-		App.BadRequestHandler().ServeHTTP(w, r)
-		return false
+		logger.Debug("Decode error", "function", "decodeXWWWForm", "struct", "Application", "error", err)
+		return err
 	}
-	return true
+	return nil
 }
 
-func (App *Application) ListController(w http.ResponseWriter, r *http.Request) {
-	requests.WithLabelValues(r.URL.EscapedPath(), r.Method).Inc()
-	//https://stackoverflow.com/questions/64437991/prevent-http-handlefunc-funcw-r-handler-being-called-for-all-unmatc
-	if !(r.URL.Path == "/system/list") {
-		log.Printf("I %v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 404)
-		http.NotFoundHandler().ServeHTTP(w, r)
-		return
-	}
-	id := App.Count.GetCount()
-	if App.Config.Debug {
-		log.Printf("D %d ListController\n", id)
-	}
-	content := App.DB.Keys()
-	log.Printf("I %v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 200)
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(content)
-	return
-}
-
-func (App *Application) FullListController(w http.ResponseWriter, r *http.Request) {
-	requests.WithLabelValues(r.URL.EscapedPath(), r.Method).Inc()
-	//https://stackoverflow.com/questions/64437991/prevent-http-handlefunc-funcw-r-handler-being-called-for-all-unmatc
-	if !(r.URL.Path == "/system/fullList") {
-		log.Printf("I %v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 404)
-		http.NotFoundHandler().ServeHTTP(w, r)
-		return
-	}
-	id := App.Count.GetCount()
-	if App.Config.Debug {
-		log.Printf("D %d ListController\n", id)
-	}
-	content := App.DB.Keys()
-	var fullList []rest.KVPairV1
-	for _, key := range content {
-		value, ok := App.DB.Get(key)
-		if ok {
-			fullList = append(fullList, rest.KVPairV1{Key: key, Value: value})
-		} else {
-			log.Printf("E Error reading key from db %v", key)
-		}
-	}
-	log.Printf("I %v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 200)
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(fullList)
-	return
-}
-
-func (App *Application) BadRequestHandler() http.HandlerFunc {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("I %v %v %v %v %v", r.Header.Get("secret_remote_address"), r.Header.Get("secret_remote_username"), r.Method, r.URL.Path, 400)
-		w.Header().Set("Content-Type", "text/html")
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("400 Bad Request"))
-		return
-	})
-}
-
-func (App *Application) HealthActuator(w http.ResponseWriter, r *http.Request) {
-	if App.Config.Prometheus.Enabled {
-		requests.WithLabelValues(r.URL.EscapedPath(), r.Method).Inc()
-	}
-	if !(r.URL.Path == "/system/health") {
-		http.NotFoundHandler().ServeHTTP(w, r)
-		return
-	}
-	reply := rest.HealthV1{Status: "UP", Requests: int(App.Count.PeakCount())}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(reply)
-	return
+func (App *Application) BadRequestHandler(w http.ResponseWriter, request *RequestParameters) {
+	logger.Info("Auth Failed",
+		"function", "ServeAuthFailed", "struct", "Auth",
+		"id", request.ID, "address", request.RequestIP,
+		"user", request.GetUserName(), "method", request.Method,
+		"path", request.orgRequest.URL.EscapedPath(), "namespace", request.Namespace, "status", 400)
+	w.Header().Set("Content-Type", "text/html")
+	w.WriteHeader(http.StatusBadRequest)
+	w.Write([]byte("400 Bad Request"))
 }
 
 func GetFunctionName(i interface{}) string {

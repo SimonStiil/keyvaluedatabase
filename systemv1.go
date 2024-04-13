@@ -8,11 +8,15 @@ import (
 )
 
 type Systemv1 struct {
-	Count             *Counter
 	PrometheusHandler http.Handler
 }
 
 func (Api *Systemv1) ApiController(w http.ResponseWriter, request *RequestParameters) {
+	logger.Debug("Request - Start",
+		"function", "ApiController", "struct", "Systemv1",
+		"id", request.ID, "address", request.RequestIP,
+		"user", request.GetUserName(), "method", request.Method,
+		"path", request.orgRequest.URL.EscapedPath(), "namespace", request.Namespace)
 	switch request.Namespace {
 	case "metrics":
 		if Api.PrometheusHandler != nil {
@@ -23,7 +27,7 @@ func (Api *Systemv1) ApiController(w http.ResponseWriter, request *RequestParame
 		if Api.PrometheusHandler != nil {
 			requests.WithLabelValues(request.orgRequest.URL.EscapedPath(), request.Method).Inc()
 		}
-		reply := rest.HealthV1{Status: "UP", Requests: int(Api.Count.PeakCount())}
+		reply := rest.HealthV1{Status: "UP", Requests: int(App.Count.PeakCount())}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(reply)
 		return

@@ -6,5 +6,5 @@ import "net/http"
 
 type API interface {
 	Permissions(request RequestParameters) *ConfigPermissions
-	ApiController(w http.ResponseWriter, r *http.Request)
+	ApiController(w http.ResponseWriter, request *RequestParameters)
 }

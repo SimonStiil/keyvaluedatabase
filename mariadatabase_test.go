@@ -28,11 +28,11 @@ func Test_Maria_DB(t *testing.T) {
 	testValue := "value"
 
 	t.Run("Delete Key (if it exists)", func(t *testing.T) {
-		dbt.DB.Delete(testKey)
+		dbt.DB.Delete(dbt.DB.GetSystemNS(), testKey)
 	})
 
 	t.Run("get value (that don't exist)", func(t *testing.T) {
-		val, ok := dbt.DB.Get(testKey)
+		val, ok := dbt.DB.Get(dbt.DB.GetSystemNS(), testKey)
 		if ok {
 			t.Errorf("Supposed to not key %v", testKey)
 		}
@@ -41,11 +41,11 @@ func Test_Maria_DB(t *testing.T) {
 		}
 	})
 	t.Run("set value", func(t *testing.T) {
-		dbt.DB.Set(testKey, testValue)
+		dbt.DB.Set(dbt.DB.GetSystemNS(), testKey, testValue)
 	})
 
 	t.Run("get value", func(t *testing.T) {
-		val, ok := dbt.DB.Get(testKey)
+		val, ok := dbt.DB.Get(dbt.DB.GetSystemNS(), testKey)
 		if !ok {
 			t.Errorf("Supposed to contain key %v", testKey)
 		}
@@ -55,7 +55,7 @@ func Test_Maria_DB(t *testing.T) {
 	})
 	t.Run("Counter Integration Test (stored db)", func(t *testing.T) {
 		count := Counter{}
-		dbt.DB.Delete("counter")
+		dbt.DB.Delete(dbt.DB.GetSystemNS(), "counter")
 		count.Init(dbt.DB)
 		val := count.GetCount()
 		if val != 0 {

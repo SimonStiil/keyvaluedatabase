@@ -3,6 +3,8 @@ package main
 import (
 	"net/http"
 	"strings"
+
+	"github.com/SimonStiil/keyvaluedatabase/rest"
 )
 
 type RequestParameters struct {
@@ -19,12 +21,15 @@ type RequestParameters struct {
 			mTLS     bool
 		}
 	}
-	Method     string
-	Api        string
-	Namespace  string
-	Secret     string
-	orgRequest *http.Request
-	RequestIP  string
+	AttachmentPair   *rest.KVPairV2
+	AttachmentUpdate *rest.KVUpdateV2
+	Method           string
+	Api              string
+	Namespace        string
+	Key              string
+	orgRequest       *http.Request
+	RequestIP        string
+	ID               int
 }
 
 func (RequestParameters *RequestParameters) GetUserName() string {
@@ -34,17 +39,17 @@ func (RequestParameters *RequestParameters) GetUserName() string {
 	return "anonymous"
 }
 
-func GetRequestParameters(r *http.Request) *RequestParameters {
+func GetRequestParameters(r *http.Request, id int) *RequestParameters {
 	slashSeperated := strings.Split(r.URL.Path[1:], "/")
-	req := &RequestParameters{Method: r.Method, orgRequest: r}
+	req := &RequestParameters{Method: r.Method, orgRequest: r, ID: id}
 	if len(slashSeperated) > 0 {
 		req.Api = slashSeperated[0]
 	}
 	if len(slashSeperated) > 1 {
-		req.Secret = slashSeperated[1]
+		req.Namespace = slashSeperated[1]
 	}
 	if len(slashSeperated) > 2 {
-		req.Namespace = slashSeperated[2]
+		req.Key = slashSeperated[2]
 	}
 	if r.TLS != nil && len(r.TLS.VerifiedChains) > 0 && len(r.TLS.VerifiedChains[0]) > 0 {
 		req.Basic.Username = r.TLS.VerifiedChains[0][0].Subject.CommonName

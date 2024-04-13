@@ -1,5 +1,6 @@
 package main
 
+/*
 import (
 	"log"
 	"net/http"
@@ -17,8 +18,6 @@ func (e *HostBlockedError) Error() string {
 	return "httpauth: Host not allowed to login"
 }
 
-// https://www.alexedwards.net/blog/basic-authentication-in-go
-// https://medium.com/@matryer/the-http-handler-wrapper-technique-in-golang-updated-bc7fbcffa702
 func (App *Application) BasicAuth(next http.HandlerFunc, permission *ConfigPermissions) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if len(App.Auth.Users) == 0 {
@@ -59,3 +58,4 @@ func (App *Application) BasicAuth(next http.HandlerFunc, permission *ConfigPermi
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 	})
 }
+*/

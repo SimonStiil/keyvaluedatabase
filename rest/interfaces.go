@@ -1,13 +1,15 @@
 package rest
 
-type KVPairV1 struct {
-	Key   string `json:"key"`
-	Value string `json:"value"`
+type KVPairV2 struct {
+	Key       string `json:"key"`
+	Namespace string `json:"namespace"`
+	Value     string `json:"value"`
 }
 
-type KVUpdateV1 struct {
-	Key  string `json:"key"`
-	Type Type   `json:"type"`
+type KVUpdateV2 struct {
+	Key       string `json:"key"`
+	Namespace string `json:"namespace"`
+	Type      Type   `json:"type"`
 }
 
 type Type string
@@ -21,11 +23,6 @@ const (
 	KeyMaxLength   uint16 = 64
 	ValueMaxLength uint16 = 21800
 )
-
-type GreetingV1 struct {
-	Id      uint32 `json:"id"`
-	Content string `json:"content"`
-}
 
 type HealthV1 struct {
 	Status   string `json:"status"`

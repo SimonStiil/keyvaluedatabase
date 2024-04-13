@@ -11,13 +11,21 @@ import (
 
 type YamlDatabase struct {
 	Initialized  bool
-	Data         map[string]string
+	Data         map[string]map[string]string
+	SystemNS     string `mapstructure:"systemnamespace"`
 	DatabaseName string
+}
+
+func (DB *YamlDatabase) GetSystemNS() string {
+	return DB.SystemNS
 }
 
 func (DB *YamlDatabase) Init() {
 	if DB.DatabaseName == "" {
 		DB.DatabaseName = "db.yaml"
+	}
+	if DB.SystemNS == "" {
+		DB.SystemNS = "kvdb"
 	}
 	defer DB.PrivateInitialize()
 
@@ -28,7 +36,7 @@ func (DB *YamlDatabase) Init() {
 		if !errors.Is(err, os.ErrNotExist) {
 			panic(err)
 		}
-		DB.Data = map[string]string{}
+		DB.Data = map[string]map[string]string{}
 	} else {
 		defer func() {
 			if r := recover(); r != nil {
@@ -47,28 +55,34 @@ func (DB *YamlDatabase) Init() {
 
 func (DB *YamlDatabase) PrivateInitialize() {
 	if DB.Data == nil {
-		DB.Data = map[string]string{}
+		DB.Data = map[string]map[string]string{}
 		DB.Initialized = true
 
 		logger.Debug("recovered", "function", "PrivateInitialize", "struct", "YamlDatabase")
 	}
 }
 
-func (DB *YamlDatabase) Set(key string, value interface{}) {
+func (DB *YamlDatabase) Set(namespace string, key string, value interface{}) {
 	if !DB.Initialized {
 		panic("Unable to set. db not initialized()")
 	}
 	// https://aguidehub.com/blog/2022-08-28-golang-convert-interface-to-string/?expand_article=1
-	DB.Data[key] = fmt.Sprint(value)
+	if _, ok := DB.Data[namespace]; !ok {
+		DB.Data[namespace] = map[string]string{}
+	}
+	DB.Data[namespace][key] = fmt.Sprint(value)
 	DB.Write()
 }
 
-func (DB *YamlDatabase) Get(key string) (string, bool) {
+func (DB *YamlDatabase) Get(namespace string, key string) (string, bool) {
 	if !DB.Initialized {
 		panic("Unable to get. db not initialized()")
 	}
 	// https://stackoverflow.com/questions/27545270/how-to-get-a-value-from-map
-	value, ok := DB.Data[key]
+	if _, ok := DB.Data[namespace]; !ok {
+		return "", ok
+	}
+	value, ok := DB.Data[namespace][key]
 	return value, ok
 }
 
@@ -91,25 +105,38 @@ func (DB *YamlDatabase) Write() {
 
 }
 
-func (DB *YamlDatabase) Keys() []string {
+func (DB *YamlDatabase) Keys(namespace string) []string {
 	if !DB.Initialized {
 		panic("Unable to get. db not initialized()")
 	}
-	keys := make([]string, len(DB.Data))
+	var length int
+	if namespace == "" {
+		length = len(DB.Data)
+	} else {
+		length = len(DB.Data[namespace])
+	}
+	keys := make([]string, length)
 
 	i := 0
-	for k := range DB.Data {
-		keys[i] = k
-		i++
+	if namespace == "" {
+		for k := range DB.Data {
+			keys[i] = k
+			i++
+		}
+	} else {
+		for k := range DB.Data[namespace] {
+			keys[i] = k
+			i++
+		}
 	}
 	return keys
 }
 
-func (DB *YamlDatabase) Delete(key string) {
+func (DB *YamlDatabase) Delete(namespace string, key string) {
 	if !DB.Initialized {
 		panic("Unable to get. db not initialized()")
 	}
-	delete(DB.Data, key)
+	delete(DB.Data[namespace], key)
 }
 
 func (DB *YamlDatabase) IsInitialized() bool {

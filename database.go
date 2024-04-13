@@ -4,10 +4,11 @@ package main
 
 type Database interface {
 	Init()
-	Set(key string, value interface{})
-	Get(key string) (string, bool)
-	Delete(key string)
-	Keys() []string
+	Set(namespace string, key string, value interface{})
+	Get(namespace string, key string) (string, bool)
+	GetSystemNS() string
+	Delete(namespace string, key string)
+	Keys(namespace string) []string
 	Close()
 	IsInitialized() bool
 }

@@ -23,7 +23,7 @@ type ConfigMysql struct {
 	Address         string `mapstructure:"address"`
 	Username        string `mapstructure:"username"`
 	DatabaseName    string `mapstructure:"databaseName"`
-	TableName       string `mapstructure:"tableName"`
+	SystemTableName string `mapstructure:"systemTableName"`
 	EnvVariableName string `mapstructure:"envVariableName"`
 	KeyName         string `mapstructure:"keyName"`
 	ValueName       string `mapstructure:"valueName"`
@@ -33,7 +33,7 @@ func MariaDBGetDefaults(configReader *viper.Viper) {
 	configReader.SetDefault("address", "localhost:3306")
 	configReader.SetDefault("username", "kvdb")
 	configReader.SetDefault("databaseName", "")
-	configReader.SetDefault("tableName", "kvdb")
+	configReader.SetDefault("systemTableName", "kvdb")
 	configReader.SetDefault("envVariableName", BaseENVname+"_MYSQL_PASSWORD")
 	configReader.SetDefault("keyName", "key")
 	configReader.SetDefault("valueName", "value")
@@ -56,17 +56,29 @@ func (MDB *MariaDatabase) Init() {
 	if err != nil {
 		panic(err.Error())
 	}
-	MDB.Connection.Exec(fmt.Sprintf("CREATE TABLE IF NOT EXISTS `%v` ( `%v` CHAR(%v) PRIMARY KEY, `%v` VARCHAR(%v) NOT NULL) ENGINE = InnoDB; ", MDB.Config.TableName, MDB.Config.KeyName, rest.KeyMaxLength, MDB.Config.ValueName, rest.ValueMaxLength))
-
+	MDB.Connection.Exec(fmt.Sprintf("CREATE TABLE IF NOT EXISTS `%v` ( `%v` CHAR(%v) PRIMARY KEY, `%v` VARCHAR(%v) NOT NULL) ENGINE = InnoDB; ", MDB.Config.SystemTableName, MDB.Config.KeyName, rest.KeyMaxLength, MDB.Config.ValueName, rest.ValueMaxLength))
+	MDB.createTable(MDB.GetSystemNS())
 	logger.Debug("Initialization complete", "function", "Init", "struct", "MariaDatabase")
 	MDB.Initialized = true
 }
+func (MDB *MariaDatabase) GetSystemNS() string {
+	return MDB.Config.SystemTableName
+}
 
-func (MDB *MariaDatabase) Set(key string, value interface{}) {
+func (MDB *MariaDatabase) createTable(namespace string) {
+	result, err := MDB.Connection.Exec(fmt.Sprintf("CREATE TABLE IF NOT EXISTS `%v` ( `%v` CHAR(%v) PRIMARY KEY, `%v` VARCHAR(%v) NOT NULL) ENGINE = InnoDB; ", namespace, MDB.Config.KeyName, rest.KeyMaxLength, MDB.Config.ValueName, rest.ValueMaxLength))
+	logger.Debug("Create table if not exists", "function", "createTable", "struct", "MariaDatabase", "namespace", namespace, "result", result)
+	if err != nil {
+		logger.Error("Error creating table", "function", "createTable", "struct", "MariaDatabase", "namespace", namespace, "error", err)
+	}
+}
+
+func (MDB *MariaDatabase) Set(namespace string, key string, value interface{}) {
 	if !MDB.Initialized {
 		panic("F Unable to set. db not initialized()")
 	}
-	statement, err := MDB.Connection.Prepare(fmt.Sprintf("INSERT INTO `%v` (`%v`, `%v`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `%v`=?", MDB.Config.TableName, MDB.Config.KeyName, MDB.Config.ValueName, MDB.Config.ValueName))
+	MDB.createTable(namespace)
+	statement, err := MDB.Connection.Prepare(fmt.Sprintf("INSERT INTO `%v` (`%v`, `%v`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `%v`=?", namespace, MDB.Config.KeyName, MDB.Config.ValueName, MDB.Config.ValueName))
 	if err != nil {
 		panic(err)
 	}
@@ -76,35 +88,41 @@ func (MDB *MariaDatabase) Set(key string, value interface{}) {
 	}
 }
 
-func (MDB *MariaDatabase) Get(key string) (string, bool) {
+func (MDB *MariaDatabase) Get(namespace string, key string) (string, bool) {
 	if !MDB.Initialized {
 		panic("F Unable to get. db not initialized()")
 	}
-	rows, err := MDB.Connection.Query(fmt.Sprintf("select * from `%v` where `%v` = ? ", MDB.Config.TableName, MDB.Config.KeyName), key)
+	rows, err := MDB.Connection.Query(fmt.Sprintf("select * from `%v` where `%v` = ? ", MDB.Config.SystemTableName, MDB.Config.KeyName), key)
 
 	if err != nil {
-		logger.Error("Query failed with error", "function", "Get", "struct", "MariaDatabase", "error", err)
+		logger.Error("Query failed with error", "function", "Get", "struct", "MariaDatabase", "namespace", namespace, "error", err)
 	}
 	defer rows.Close()
-	var kvpair rest.KVPairV1
+	kvpair := rest.KVPairV2{Namespace: namespace}
 	found := false
 	for rows.Next() {
 		err = rows.Scan(&kvpair.Key, &kvpair.Value)
 		if err != nil {
-			logger.Error("Scan row failed with error", "function", "Get", "struct", "MariaDatabase", "error", err)
+			logger.Error("Scan row failed with error", "function", "Get", "struct", "MariaDatabase", "namespace", namespace, "error", err)
 		}
 		found = true
 	}
 	return kvpair.Value, found
 }
 
-func (MDB *MariaDatabase) Keys() []string {
+func (MDB *MariaDatabase) Keys(namespace string) []string {
 	if !MDB.Initialized {
 		panic("F Unable to get. db not initialized()")
 	}
-	rows, err := MDB.Connection.Query(fmt.Sprintf("select `%v` from `%v`", MDB.Config.KeyName, MDB.Config.TableName))
+	var rows *sql.Rows
+	var err error
+	if namespace == "" {
+		rows, err = MDB.Connection.Query("show TABLES")
+	} else {
+		rows, err = MDB.Connection.Query(fmt.Sprintf("select `%v` from `%v`", MDB.Config.KeyName, namespace))
+	}
 	if err != nil {
-		logger.Error("Query failed with error", "function", "Keys", "struct", "MariaDatabase", "error", err)
+		logger.Error("Query failed with error", "function", "Keys", "struct", "MariaDatabase", "namespace", namespace, "error", err)
 	}
 	defer rows.Close()
 	keys := []string{}
@@ -112,24 +130,24 @@ func (MDB *MariaDatabase) Keys() []string {
 		var key string
 		err = rows.Scan(&key)
 		if err != nil {
-			logger.Error("Scan row failed with error", "function", "Keys", "struct", "MariaDatabase", "error", err)
+			logger.Error("Scan row failed with error", "function", "Keys", "struct", "MariaDatabase", "namespace", namespace, "error", err)
 		}
 		keys = append(keys, key)
 	}
 	return keys
 }
 
-func (MDB *MariaDatabase) Delete(key string) {
+func (MDB *MariaDatabase) Delete(namespace string, key string) {
 	if !MDB.Initialized {
 		panic("F Unable to get. db not initialized()")
 	}
-	stmt, err := MDB.Connection.Prepare(fmt.Sprintf("delete from `%v` where `%v` = ?", MDB.Config.TableName, MDB.Config.KeyName))
+	stmt, err := MDB.Connection.Prepare(fmt.Sprintf("delete from `%v` where `%v` = ?", namespace, MDB.Config.KeyName))
 	if err != nil {
-		logger.Error("Prepare failed with error", "function", "Delete", "struct", "MariaDatabase", "error", err)
+		logger.Error("Prepare failed with error", "function", "Delete", "struct", "MariaDatabase", "namespace", namespace, "error", err)
 	}
 	_, err = stmt.Exec(key)
 	if err != nil {
-		logger.Error("Exec failed with error", "function", "Delete", "struct", "MariaDatabase", "error", err)
+		logger.Error("Exec failed with error", "function", "Delete", "struct", "MariaDatabase", "namespace", namespace, "error", err)
 	}
 }
 

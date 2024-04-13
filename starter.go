@@ -30,9 +30,10 @@ var (
 	keys = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "key_request_count",
 		Help: "The amount of requests for a certain key",
-	}, []string{"key", "method", "error"},
+	}, []string{"key", "namespace", "method", "error"},
 	)
 	logger *slog.Logger
+	App    *Application
 )
 
 type ConfigType struct {
@@ -154,7 +155,7 @@ func main() {
 	flag.StringVar(&test, "test", "", "Test a base64hash versus a password")
 	flag.StringVar(&configFileName, "config", "config", "Use a different config file name")
 	flag.Parse()
-	App := new(Application)
+	App = new(Application)
 	ConfigRead(configFileName, &App.Config)
 	// Logging setup
 	setupLogging(App.Config.Logging)
@@ -178,30 +179,17 @@ func main() {
 	App.Count = &Counter{}
 	App.Count.Init(App.DB)
 	defer App.DB.Close()
-	greetingController := http.HandlerFunc(App.GreetingController)
-	rootControllerV1 := http.HandlerFunc(App.RootControllerV1)
-	listController := http.HandlerFunc(App.ListController)
-	fullListController := http.HandlerFunc(App.FullListController)
-	healthActuator := http.HandlerFunc(App.HealthActuator)
 	if App.Config.Prometheus.Enabled {
 		logger.Info(fmt.Sprintf("Metrics enabled at %v\n", App.Config.Prometheus.Endpoint), "function", "main")
 		http.Handle(App.Config.Prometheus.Endpoint, promhttp.Handler())
 	}
 	regularServerMux := http.NewServeMux()
-	regularServerMux.HandleFunc("/system/greeting", greetingController) // nil
-	regularServerMux.HandleFunc("/", rootControllerV1)                  // nil
-	regularServerMux.HandleFunc("/system/list", listController)         // &ConfigPermissions{List: true}
-	regularServerMux.HandleFunc("/system/fullList", fullListController) // &ConfigPermissions{List: true, Read: true}
-	regularServerMux.HandleFunc("/system/health", healthActuator)
+	regularServerMux.HandleFunc("/", http.HandlerFunc(App.RootControllerV1))
 
 	logger.Info("users does not contain any entries, password auth disabled", "function", "main")
 	if App.Config.MTLS.Enabled {
 		mtlsServerMux := http.NewServeMux()
-		mtlsServerMux.HandleFunc("/system/greeting", greetingController)
-		mtlsServerMux.HandleFunc("/", rootControllerV1)
-		mtlsServerMux.HandleFunc("/system/list", listController)
-		mtlsServerMux.HandleFunc("/system/fullList", fullListController)
-		mtlsServerMux.HandleFunc("/system/health", healthActuator)
+		mtlsServerMux.HandleFunc("/", http.HandlerFunc(App.RootControllerV1))
 		go App.ServeHTTP(regularServerMux)
 		go App.ServeHTTPMTLS(mtlsServerMux)
 		sigInterruptChannel := make(chan os.Signal, 1)

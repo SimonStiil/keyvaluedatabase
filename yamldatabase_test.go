@@ -27,7 +27,7 @@ func Test_Yaml_DB(t *testing.T) {
 	testValue := "value"
 
 	t.Run("get value (that don't exist yet)", func(t *testing.T) {
-		val, ok := dbt.DB.Get(testKey)
+		val, ok := dbt.DB.Get(dbt.DB.GetSystemNS(), testKey)
 		if ok {
 			t.Errorf("Supposed to not key %v", testKey)
 		}
@@ -36,11 +36,11 @@ func Test_Yaml_DB(t *testing.T) {
 		}
 	})
 	t.Run("set value", func(t *testing.T) {
-		dbt.DB.Set(testKey, testValue)
+		dbt.DB.Set(dbt.DB.GetSystemNS(), testKey, testValue)
 	})
 
 	t.Run("get value", func(t *testing.T) {
-		val, ok := dbt.DB.Get(testKey)
+		val, ok := dbt.DB.Get(dbt.DB.GetSystemNS(), testKey)
 		if !ok {
 			t.Errorf("Supposed to contain key %v", testKey)
 		}
