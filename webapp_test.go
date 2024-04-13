@@ -20,16 +20,15 @@ var requestsCount int
 
 func TestGETGreeting(t *testing.T) {
 	app := new(Application)
-	app.Config = ConfigType{Debug: true}
 	t.Run("Initialize DB for Tests", func(t *testing.T) {
 		fileName := "testdb.yaml"
 		err := os.Remove(fileName)
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			t.Fatal(err)
 		}
-		app.DB = &YamlDatabase{DatabaseName: fileName, Config: &ConfigType{Debug: true}}
+		app.DB = &YamlDatabase{DatabaseName: fileName}
 		app.DB.Init()
-		app.Count = &Counter{Config: &ConfigType{Debug: true}}
+		app.Count = &Counter{}
 		app.Count.Init(app.DB)
 	})
 	t.Run("Greetings", func(t *testing.T) {

@@ -13,8 +13,9 @@ type DBTest struct {
 
 func Test_Yaml_DB(t *testing.T) {
 	dbt := new(DBTest)
+	setupTestlogging()
 	dbt.FileName = "testdb.yaml"
-	dbt.DB = &YamlDatabase{DatabaseName: dbt.FileName, Config: &ConfigType{Debug: true}}
+	dbt.DB = &YamlDatabase{DatabaseName: dbt.FileName}
 	t.Run("initialize fresh db", func(t *testing.T) {
 		err := os.Remove(dbt.FileName)
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -48,7 +49,7 @@ func Test_Yaml_DB(t *testing.T) {
 		}
 	})
 	t.Run("Counter Integration Test (stored db)", func(t *testing.T) {
-		count := Counter{Config: &ConfigType{Debug: true}}
+		count := Counter{}
 		err := os.Remove(dbt.FileName)
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			t.Fatal(err)
@@ -75,7 +76,7 @@ func Test_Yaml_DB(t *testing.T) {
 		}
 	})
 	t.Run("Counter Integration Test (fresh db)", func(t *testing.T) {
-		count := Counter{Config: &ConfigType{Debug: true}}
+		count := Counter{}
 		err := os.Remove(dbt.FileName)
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			t.Fatal(err)

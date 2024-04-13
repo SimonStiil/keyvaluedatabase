@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 
 	"database/sql"
@@ -15,7 +14,7 @@ import (
 type MariaDatabase struct {
 	Initialized  bool
 	Connection   *sql.DB
-	Config       *ConfigType
+	Config       *ConfigMysql
 	Password     string
 	DatabaseName string
 }
@@ -31,39 +30,35 @@ type ConfigMysql struct {
 }
 
 func MariaDBGetDefaults(configReader *viper.Viper) {
-	configReader.SetDefault("mysql.address", "localhost:3306")
-	configReader.SetDefault("mysql.username", "kvdb")
-	configReader.SetDefault("mysql.databaseName", "")
-	configReader.SetDefault("mysql.tableName", "kvdb")
-	configReader.SetDefault("mysql.envVariableName", BaseENVname+"_MYSQL_PASSWORD")
-	configReader.SetDefault("mysql.keyName", "key")
-	configReader.SetDefault("mysql.valueName", "value")
+	configReader.SetDefault("address", "localhost:3306")
+	configReader.SetDefault("username", "kvdb")
+	configReader.SetDefault("databaseName", "")
+	configReader.SetDefault("tableName", "kvdb")
+	configReader.SetDefault("envVariableName", BaseENVname+"_MYSQL_PASSWORD")
+	configReader.SetDefault("keyName", "key")
+	configReader.SetDefault("valueName", "value")
 }
 
 func (MDB *MariaDatabase) Init() {
-	if MDB.Config.Debug {
-		log.Println("D db.init (MariaDB)")
-	}
-	if MDB.Config.Mysql.DatabaseName == "" {
-		MDB.DatabaseName = MDB.Config.Mysql.Username
-	} else {
-		MDB.DatabaseName = MDB.Config.Mysql.DatabaseName
-	}
-	MDB.Password = os.Getenv(MDB.Config.Mysql.EnvVariableName)
-	var err error
-	connectionString := fmt.Sprintf("%v:%v@tcp(%v)/%v", MDB.Config.Mysql.Username, MDB.Password, MDB.Config.Mysql.Address, MDB.DatabaseName)
 
-	if MDB.Config.Debug {
-		log.Println("D db.init - ", connectionString)
+	logger.Debug("Initializing MariaDB", "function", "Init", "struct", "MariaDatabase")
+	if MDB.Config.DatabaseName == "" {
+		MDB.DatabaseName = MDB.Config.Username
+	} else {
+		MDB.DatabaseName = MDB.Config.DatabaseName
 	}
+	MDB.Password = os.Getenv(MDB.Config.EnvVariableName)
+	var err error
+	connectionString := fmt.Sprintf("%v:%v@tcp(%v)/%v", MDB.Config.Username, MDB.Password, MDB.Config.Address, MDB.DatabaseName)
+
+	logger.Debug("Connection string: "+connectionString, "function", "Init", "struct", "MariaDatabase")
 	MDB.Connection, err = sql.Open("mysql", connectionString)
 	if err != nil {
 		panic(err.Error())
 	}
-	MDB.Connection.Exec(fmt.Sprintf("CREATE TABLE IF NOT EXISTS `%v` ( `%v` CHAR(32) PRIMARY KEY, `%v` VARCHAR(21800) NOT NULL) ENGINE = InnoDB; ", MDB.Config.Mysql.TableName, MDB.Config.Mysql.KeyName, MDB.Config.Mysql.ValueName))
-	if MDB.Config.Debug {
-		log.Println("D db.init - complete")
-	}
+	MDB.Connection.Exec(fmt.Sprintf("CREATE TABLE IF NOT EXISTS `%v` ( `%v` CHAR(%v) PRIMARY KEY, `%v` VARCHAR(%v) NOT NULL) ENGINE = InnoDB; ", MDB.Config.TableName, MDB.Config.KeyName, rest.KeyMaxLength, MDB.Config.ValueName, rest.ValueMaxLength))
+
+	logger.Debug("Initialization complete", "function", "Init", "struct", "MariaDatabase")
 	MDB.Initialized = true
 }
 
@@ -71,7 +66,7 @@ func (MDB *MariaDatabase) Set(key string, value interface{}) {
 	if !MDB.Initialized {
 		panic("F Unable to set. db not initialized()")
 	}
-	statement, err := MDB.Connection.Prepare(fmt.Sprintf("INSERT INTO `%v` (`%v`, `%v`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `%v`=?", MDB.Config.Mysql.TableName, MDB.Config.Mysql.KeyName, MDB.Config.Mysql.ValueName, MDB.Config.Mysql.ValueName))
+	statement, err := MDB.Connection.Prepare(fmt.Sprintf("INSERT INTO `%v` (`%v`, `%v`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `%v`=?", MDB.Config.TableName, MDB.Config.KeyName, MDB.Config.ValueName, MDB.Config.ValueName))
 	if err != nil {
 		panic(err)
 	}
@@ -85,9 +80,10 @@ func (MDB *MariaDatabase) Get(key string) (string, bool) {
 	if !MDB.Initialized {
 		panic("F Unable to get. db not initialized()")
 	}
-	rows, err := MDB.Connection.Query(fmt.Sprintf("select * from `%v` where `%v` = ? ", MDB.Config.Mysql.TableName, MDB.Config.Mysql.KeyName), key)
+	rows, err := MDB.Connection.Query(fmt.Sprintf("select * from `%v` where `%v` = ? ", MDB.Config.TableName, MDB.Config.KeyName), key)
+
 	if err != nil {
-		log.Fatal(err)
+		logger.Error("Query failed with error", "function", "Get", "struct", "MariaDatabase", "error", err)
 	}
 	defer rows.Close()
 	var kvpair rest.KVPairV1
@@ -95,7 +91,7 @@ func (MDB *MariaDatabase) Get(key string) (string, bool) {
 	for rows.Next() {
 		err = rows.Scan(&kvpair.Key, &kvpair.Value)
 		if err != nil {
-			log.Fatal(err)
+			logger.Error("Scan row failed with error", "function", "Get", "struct", "MariaDatabase", "error", err)
 		}
 		found = true
 	}
@@ -106,9 +102,9 @@ func (MDB *MariaDatabase) Keys() []string {
 	if !MDB.Initialized {
 		panic("F Unable to get. db not initialized()")
 	}
-	rows, err := MDB.Connection.Query(fmt.Sprintf("select `%v` from `%v`", MDB.Config.Mysql.KeyName, MDB.Config.Mysql.TableName))
+	rows, err := MDB.Connection.Query(fmt.Sprintf("select `%v` from `%v`", MDB.Config.KeyName, MDB.Config.TableName))
 	if err != nil {
-		log.Fatal(err)
+		logger.Error("Query failed with error", "function", "Keys", "struct", "MariaDatabase", "error", err)
 	}
 	defer rows.Close()
 	keys := []string{}
@@ -116,7 +112,7 @@ func (MDB *MariaDatabase) Keys() []string {
 		var key string
 		err = rows.Scan(&key)
 		if err != nil {
-			log.Fatal(err)
+			logger.Error("Scan row failed with error", "function", "Keys", "struct", "MariaDatabase", "error", err)
 		}
 		keys = append(keys, key)
 	}
@@ -127,13 +123,13 @@ func (MDB *MariaDatabase) Delete(key string) {
 	if !MDB.Initialized {
 		panic("F Unable to get. db not initialized()")
 	}
-	stmt, err := MDB.Connection.Prepare(fmt.Sprintf("delete from `%v` where `%v` = ?", MDB.Config.Mysql.TableName, MDB.Config.Mysql.KeyName))
+	stmt, err := MDB.Connection.Prepare(fmt.Sprintf("delete from `%v` where `%v` = ?", MDB.Config.TableName, MDB.Config.KeyName))
 	if err != nil {
-		log.Fatal(err)
+		logger.Error("Prepare failed with error", "function", "Delete", "struct", "MariaDatabase", "error", err)
 	}
 	_, err = stmt.Exec(key)
 	if err != nil {
-		log.Fatal(err)
+		logger.Error("Exec failed with error", "function", "Delete", "struct", "MariaDatabase", "error", err)
 	}
 }
 
@@ -149,7 +145,5 @@ func (MDB *MariaDatabase) Close() {
 	if err != nil {
 		panic(err)
 	}
-	if MDB.Config.Debug {
-		log.Println("D db.closed")
-	}
+	logger.Debug("Closed database connection", "function", "Close", "struct", "MariaDatabase")
 }

@@ -4,10 +4,11 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -31,29 +32,35 @@ var (
 		Help: "The amount of requests for a certain key",
 	}, []string{"key", "method", "error"},
 	)
+	logger *slog.Logger
 )
 
 type ConfigType struct {
-	Debug          bool             `mapstructure:"debug"`
+	Logging        ConfigLogging    `mapstructure:"logging"`
 	Port           string           `mapstructure:"port"`
 	DatabaseType   string           `mapstructure:"databaseType"`
 	Users          []ConfigUser     `mapstructure:"users"`
-	Hosts          []ConfigHosts    `mapstructure:"hosts"`
 	MTLS           MTLSConfig       `mapstructure:"mtls"`
 	TrustedProxies []string         `mapstructure:"trustedProxies"`
 	Redis          ConfigRedis      `mapstructure:"redis"`
 	Mysql          ConfigMysql      `mapstructure:"mysql"`
 	Prometheus     ConfigPrometheus `mapstructure:"prometheus"`
 }
-
-type ConfigUser struct {
-	Username    string            `mapstructure:"username"`
-	Password    string            `mapstructure:"password"`
-	Permissions ConfigPermissions `mapstructure:"permissions"`
+type ConfigLogging struct {
+	Level  string `mapstructure:"level"`
+	Format string `mapstructure:"format"`
+	File   string `mapstructure:"file"`
 }
 
-type ConfigHosts struct {
-	Address     string            `mapstructure:"address"`
+type ConfigUser struct {
+	Username       string                 `mapstructure:"username"`
+	Password       string                 `mapstructure:"password"`
+	Permissionsset []ConfigPermissionsset `mapstructure:"permissionsset"`
+	Hosts          []string               `mapstructure:"hosts"`
+}
+
+type ConfigPermissionsset struct {
+	Namespaces  []string          `mapstructure:"namespaces"`
 	Permissions ConfigPermissions `mapstructure:"permissions"`
 }
 
@@ -90,7 +97,7 @@ func ConfigRead(configFileName string, configOutput *ConfigType) {
 	configReader.SetEnvPrefix(BaseENVname)
 	MariaDBGetDefaults(configReader)
 	RedisDBGetDefaults(configReader)
-	configReader.SetDefault("debug", false)
+	configReader.SetDefault("log", false)
 	configReader.SetDefault("port", 8080)
 	configReader.SetDefault("databaseType", "yaml")
 	configReader.SetDefault("prometheus.enabled", true)
@@ -112,6 +119,34 @@ func ConfigRead(configFileName string, configOutput *ConfigType) {
 	configReader.AutomaticEnv()
 	configReader.Unmarshal(configOutput)
 }
+func setupLogging(Logging ConfigLogging) {
+	logLevel := strings.ToLower(Logging.Level)
+	logFormat := strings.ToLower(Logging.Format)
+	loggingLevel := new(slog.LevelVar)
+	switch logLevel {
+	case "debug":
+		loggingLevel.Set(slog.LevelDebug)
+	case "warn":
+		loggingLevel.Set(slog.LevelWarn)
+	case "error":
+		loggingLevel.Set(slog.LevelError)
+	default:
+		loggingLevel.Set(slog.LevelInfo)
+	}
+	switch logFormat {
+	case "json":
+		logger = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: loggingLevel}))
+	default:
+		logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: loggingLevel}))
+	}
+	logger.Info("Logging started with options", "format", Logging.Format, "level", Logging.Level, "function", "setupLogging")
+}
+
+func setupTestlogging() {
+	loggingLevel := new(slog.LevelVar)
+	loggingLevel.Set(slog.LevelDebug)
+	logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: loggingLevel}))
+}
 
 // https://medium.com/mercadolibre-tech/go-language-relational-databases-and-orms-682a5fd3bbb6
 func main() {
@@ -120,42 +155,27 @@ func main() {
 	flag.StringVar(&configFileName, "config", "config", "Use a different config file name")
 	flag.Parse()
 	App := new(Application)
-	log.Println("I Reading Configuration")
 	ConfigRead(configFileName, &App.Config)
-
-	if App.Config.Debug {
-		log.Println("D Debugging: ", App.Config.Debug)
-	}
+	// Logging setup
+	setupLogging(App.Config.Logging)
 	App.Auth.AuthGenerate(generate, test)
-	App.Auth.Init(App.Config)
+	//App.Auth.Init(App.Config)
 
-	App.HostHeadders = []string{
-		"X-Forwarded-For",
-		"HTTP_FORWARDED",
-		"HTTP_FORWARDED_FOR",
-		"HTTP_X_FORWARDED",
-		"HTTP_X_FORWARDED_FOR",
-		"HTTP_CLIENT_IP",
-		"HTTP_VIA",
-		"HTTP_X_CLUSTER_CLIENT_IP",
-		"Proxy-Client-IP",
-		"WL-Proxy-Client-IP",
-		"REMOTE_ADDR"}
 	switch App.Config.DatabaseType {
 	case "redis":
-		log.Printf("I Using Redis DB\n")
-		App.DB = &RedisDatabase{Config: &App.Config}
+		logger.Info("Using Redis DB", "function", "main")
+		App.DB = &RedisDatabase{Config: &App.Config.Redis}
 		App.DB.Init()
 	case "mysql":
-		log.Printf("I Using Maria DB\n")
-		App.DB = &MariaDatabase{Config: &App.Config}
+		logger.Info("Using Maria DB", "function", "main")
+		App.DB = &MariaDatabase{Config: &App.Config.Mysql}
 		App.DB.Init()
 	case "yaml":
-		log.Print("I Using Yaml DB. (no Redis or Mysql configuration)\n")
-		App.DB = &YamlDatabase{Config: &App.Config}
+		logger.Info("Using Yaml DB (no Redis or Mysql configuration)", "function", "main")
+		App.DB = &YamlDatabase{}
 		App.DB.Init()
 	}
-	App.Count = &Counter{Config: &App.Config}
+	App.Count = &Counter{}
 	App.Count.Init(App.DB)
 	defer App.DB.Close()
 	greetingController := http.HandlerFunc(App.GreetingController)
@@ -164,32 +184,24 @@ func main() {
 	fullListController := http.HandlerFunc(App.FullListController)
 	healthActuator := http.HandlerFunc(App.HealthActuator)
 	if App.Config.Prometheus.Enabled {
-		log.Printf("I Metrics enabled at %v\n", App.Config.Prometheus.Endpoint)
+		logger.Info(fmt.Sprintf("Metrics enabled at %v\n", App.Config.Prometheus.Endpoint), "function", "main")
 		http.Handle(App.Config.Prometheus.Endpoint, promhttp.Handler())
 	}
-	ListPermission := &ConfigPermissions{List: true}
-	FullListPermission := &ConfigPermissions{List: true, Read: true}
 	regularServerMux := http.NewServeMux()
-	regularServerMux.HandleFunc("/system/greeting", App.GetIP(App.HostBlocker(App.BasicAuth(greetingController, nil), nil)))
-	regularServerMux.HandleFunc("/", App.GetIP(App.HostBlocker(App.BasicAuth(rootControllerV1, nil), nil)))
-	regularServerMux.HandleFunc("/system/list", App.GetIP(App.HostBlocker(App.BasicAuth(listController, ListPermission), ListPermission)))
-	regularServerMux.HandleFunc("/system/fullList", App.GetIP(App.HostBlocker(App.BasicAuth(fullListController, FullListPermission), FullListPermission)))
+	regularServerMux.HandleFunc("/system/greeting", greetingController) // nil
+	regularServerMux.HandleFunc("/", rootControllerV1)                  // nil
+	regularServerMux.HandleFunc("/system/list", listController)         // &ConfigPermissions{List: true}
+	regularServerMux.HandleFunc("/system/fullList", fullListController) // &ConfigPermissions{List: true, Read: true}
 	regularServerMux.HandleFunc("/system/health", healthActuator)
-	if App.Config.Debug {
-		if len(App.Config.Hosts) == 0 {
-			log.Println("D config: hosts does not contain any entries, all hosts allowed")
-		}
-		if len(App.Auth.Users) == 0 {
-			log.Println("D config: users does not contain any entries, password auth disabled")
-		}
-	}
+
+	logger.Info("users does not contain any entries, password auth disabled", "function", "main")
 	if App.Config.MTLS.Enabled {
 		mtlsServerMux := http.NewServeMux()
-		mtlsServerMux.HandleFunc("/system/greeting", App.SetMTLSUser(App.GetIP(greetingController)))
-		mtlsServerMux.HandleFunc("/", App.SetMTLSUser(App.GetIP(rootControllerV1)))
-		mtlsServerMux.HandleFunc("/system/list", App.SetMTLSUser(App.GetIP(listController)))
-		mtlsServerMux.HandleFunc("/system/fullList", App.SetMTLSUser(App.GetIP(fullListController)))
-		mtlsServerMux.HandleFunc("/system/health", App.SetMTLSUser(App.GetIP(healthActuator)))
+		mtlsServerMux.HandleFunc("/system/greeting", greetingController)
+		mtlsServerMux.HandleFunc("/", rootControllerV1)
+		mtlsServerMux.HandleFunc("/system/list", listController)
+		mtlsServerMux.HandleFunc("/system/fullList", fullListController)
+		mtlsServerMux.HandleFunc("/system/health", healthActuator)
 		go App.ServeHTTP(regularServerMux)
 		go App.ServeHTTPMTLS(mtlsServerMux)
 		sigInterruptChannel := make(chan os.Signal, 1)

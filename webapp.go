@@ -16,17 +16,15 @@ import (
 
 	"github.com/SimonStiil/keyvaluedatabase/rest"
 	"github.com/gorilla/schema"
-	"github.com/netinternet/remoteaddr"
 )
 
 type Application struct {
-	Auth         Auth
-	Config       ConfigType
-	Count        *Counter
-	DB           Database
-	HTTPServer   *http.Server
-	MTLSServer   *http.Server
-	HostHeadders []string
+	Auth       Auth
+	Config     ConfigType
+	Count      *Counter
+	DB         Database
+	HTTPServer *http.Server
+	MTLSServer *http.Server
 }
 
 func (App *Application) GreetingController(w http.ResponseWriter, r *http.Request) {
@@ -389,98 +387,6 @@ func (App *Application) HealthActuator(w http.ResponseWriter, r *http.Request) {
 
 func GetFunctionName(i interface{}) string {
 	return runtime.FuncForPC(reflect.ValueOf(i).Pointer()).Name()
-}
-
-// https://www.alexedwards.net/blog/basic-authentication-in-go
-// https://medium.com/@matryer/the-http-handler-wrapper-technique-in-golang-updated-bc7fbcffa702
-func (App *Application) BasicAuth(next http.HandlerFunc, permission *ConfigPermissions) http.HandlerFunc {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if len(App.Auth.Users) == 0 {
-			next.ServeHTTP(w, r)
-			return
-		}
-		if permission == nil {
-			switch r.Method {
-			case "GET":
-				permission = &ConfigPermissions{Read: true}
-				break
-			case "POST", "PUT", "UPDATE", "PATCH", "DELETE":
-				permission = &ConfigPermissions{Write: true}
-				break
-			default:
-				permission = &ConfigPermissions{Write: true, Read: true, List: true}
-			}
-		}
-		if App.Config.Debug {
-			log.Println("D BasicAuth for: ", GetFunctionName(next))
-		}
-		username, password, ok := r.BasicAuth()
-		if ok {
-			user, ok := App.Auth.Users[username]
-			if ok {
-				passwordHash := AuthHash(password)
-				if AuthTest(passwordHash, user.PasswordEnc) {
-					if AuthTestPermission(user.Permissions, *permission) {
-						r.Header.Set("secret_remote_username", username)
-						next.ServeHTTP(w, r)
-						return
-					}
-				}
-			}
-		} else {
-			username = "-"
-		}
-		log.Printf("I %v %v %v %v %v %v", r.Header.Get("secret_remote_address"), username, r.Method, r.URL.Path, 401, "BasicAuthCheckFailed")
-		w.Header().Set("WWW-Authenticate", `Basic realm="restricted", charset="UTF-8"`)
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-	})
-}
-
-func (App *Application) GetIP(next http.HandlerFunc) http.HandlerFunc {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		address, _ := remoteaddr.Parse().IP(r)
-		foundHeadderName := "remoteaddr"
-		if App.Config.Debug {
-			log.Println("D HostBlocker - ", "request from: ", address)
-		}
-		var trustedProxy bool
-		for _, proxyAddress := range App.Config.TrustedProxies {
-			if proxyAddress == address {
-				if App.Config.Debug {
-					log.Printf("D HostBlocker - trustedProxy - %v is trusted\n", address)
-				}
-				trustedProxy = true
-				break
-			}
-		}
-		if trustedProxy {
-			for _, headderName := range App.HostHeadders {
-				headder := r.Header[headderName]
-				if len(headder) > 0 {
-					if App.Config.Debug {
-						log.Println("D HostBlocker - ", headderName, " - ", address)
-					}
-					address = headder[0]
-					foundHeadderName = headderName
-					break
-				}
-			}
-		} else {
-			if App.Config.Debug {
-				log.Printf("D HostBlocker - trustedProxy - %v is not trusted, skipping headders\n", address)
-			}
-		}
-		r.Header.Set("secret_remote_address", address)
-		r.Header.Set("secret_remote_header", foundHeadderName)
-		next.ServeHTTP(w, r)
-	})
-}
-
-func (App *Application) SetMTLSUser(next http.HandlerFunc) http.HandlerFunc {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r.Header.Set("secret_remote_username", "mtls")
-		next.ServeHTTP(w, r)
-	})
 }
 
 func (App *Application) ServeHTTP(mux *http.ServeMux) {

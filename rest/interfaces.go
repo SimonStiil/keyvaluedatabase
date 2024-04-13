@@ -17,6 +17,11 @@ const (
 	TypeGenerate Type = "generate"
 )
 
+const (
+	KeyMaxLength   uint16 = 64
+	ValueMaxLength uint16 = 21800
+)
+
 type GreetingV1 struct {
 	Id      uint32 `json:"id"`
 	Content string `json:"content"`

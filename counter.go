@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log"
 	"reflect"
 	"strconv"
 	"sync"
@@ -10,24 +9,19 @@ import (
 type Counter struct {
 	Mutex   sync.Mutex
 	Value   uint32
-	Config  *ConfigType
 	DB      Database
 	testing bool
 }
 
 func (Count *Counter) Init(DB Database) {
-	if Count.Config.Debug {
-		log.Println("D count.Init")
-	}
+	logger.Debug("Initializing", "function", "Init", "struct", "Counter")
 	Count.DB = DB
 	Count.Mutex.Lock()
 	defer Count.Mutex.Unlock()
 	if Count.DB != nil && Count.DB.IsInitialized() {
 		val, ok := Count.DB.Get("counter")
 		Count.Value = 0
-		if Count.Config.Debug {
-			log.Println("D count.Init get - ", val, " type: ", reflect.TypeOf(val))
-		}
+		logger.Debug("Get count from db", "function", "Init", "struct", "Counter", "value", val, "type", reflect.TypeOf(val))
 		if ok {
 			fromString, err := strconv.ParseInt(val, 10, 32)
 			if err != nil {
@@ -38,9 +32,7 @@ func (Count *Counter) Init(DB Database) {
 	} else {
 		Count.Value = 0
 	}
-	if Count.Config.Debug {
-		log.Println("D count.Init - complete")
-	}
+	logger.Debug("Initialization complete", "function", "Init", "struct", "Counter")
 }
 func (Count *Counter) GetCount() uint32 {
 	Count.Mutex.Lock()
@@ -50,8 +42,8 @@ func (Count *Counter) GetCount() uint32 {
 	if Count.DB != nil && Count.DB.IsInitialized() {
 		Count.DB.Set("counter", Count.Value)
 	} else {
-		if !Count.testing && Count.Config.Debug {
-			log.Println("D getCount db.isInitialized not true")
+		if !Count.testing {
+			logger.Error("Not initialized", "function", "GetCount", "struct", "Counter")
 		}
 	}
 	return currentCount
