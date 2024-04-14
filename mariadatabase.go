@@ -56,8 +56,11 @@ func (MDB *MariaDatabase) Init() {
 	if err != nil {
 		panic(err.Error())
 	}
-	MDB.Connection.Exec(fmt.Sprintf("CREATE TABLE IF NOT EXISTS `%v` ( `%v` CHAR(%v) PRIMARY KEY, `%v` VARCHAR(%v) NOT NULL) ENGINE = InnoDB; ", MDB.Config.SystemTableName, MDB.Config.KeyName, rest.KeyMaxLength, MDB.Config.ValueName, rest.ValueMaxLength))
-	MDB.createTable(MDB.GetSystemNS())
+  _, err =  MDB.Connection.Exec(fmt.Sprintf("CREATE TABLE IF NOT EXISTS `%v` ( `%v` CHAR(%v) PRIMARY KEY, `%v` VARCHAR(%v) NOT NULL) ENGINE = InnoDB; ", MDB.Config.SystemTableName, MDB.Config.KeyName, rest.KeyMaxLength, MDB.Config.ValueName, rest.ValueMaxLength))
+	if err != nil {
+		panic(err.Error())
+	}
+  MDB.createTable(MDB.GetSystemNS())
 	logger.Debug("Initialization complete", "function", "Init", "struct", "MariaDatabase")
 	MDB.Initialized = true
 }
