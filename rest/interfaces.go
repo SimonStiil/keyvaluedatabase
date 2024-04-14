@@ -21,7 +21,7 @@ const (
 
 const (
 	KeyMaxLength   uint16 = 64
-	ValueMaxLength uint16 = 21800
+	ValueMaxLength uint16 = 16000
 )
 
 type HealthV1 struct {
