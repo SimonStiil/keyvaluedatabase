@@ -3,33 +3,35 @@ databaseType: yaml
 users:
 - username: user # Username
   password: "XohImNooBHFR0OVvjcYpJ3NgPQ1qq73WKhHvch0VQtg=" # Hashed password from ./kvdb -generate=password
-  permissions:
-    read: true # User has Read Permission
-    write: true # User has Write Permission
-    list: true # User has List Permission
+  hosts:
+  - "::1"
+  - 127.0.0.1
+  permissionsset:
+  - namespaces:
+    - "*"
+    permissions:
+      read: true
+      write: true
+      list: true
+- username: test # Username
+  password: "n3NeDfmh3ccCvwoae4MDP59xU6AMKd6CztrcmVcomwU=" # Hashed password from ./kvdb -generate=testpassword
+  hosts:
+  - 172.17.0.6
+  permissionsset:
+  - namespaces:
+    - "hello"
+    permissions:
+      read: true
+      write: true
+      list: true
+  - namespaces:
+    - "world"
+    permissions:
+      read: true
+      write: false
+      list: false
 trustedProxies: # List of hosts that are trusted reading HostHeadders for. If request not from list only ip origin will be used
 - 172.17.0.1
-hosts:
-- address: "::1" # IPv6 of host that is allowed this access
-  permissions:
-    read: true # Host has Read Permission
-    write: true # Host has Write Permission
-    list: true # Host has List Permission
-- address: "127.0.0.1" # IPv4 of host that is allowed this access
-  permissions:
-    read: true # Host has Read Permission
-    write: true # Host has Write Permission
-    list: true # Host has List Permission
-- address: "192.168.0.1/24" # CIDR of hosts that is allowed this access
-  permissions:
-    read: true # Host has Read Permission
-    write: true # Host has Write Permission
-    list: true # Host has List Permission
-- address: "example.com" # DNS name of host that is allowed this access
-  permissions:
-    read: true # Host has Read Permission
-    write: true # Host has Write Permission
-    list: true # Host has List Permission
 redis:
   address: "127.0.0.1:6379"
   # envVariableName: # Set if different from KVDB_REDIS_PASSWORD

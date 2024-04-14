@@ -7,10 +7,11 @@ import (
 )
 
 type Counter struct {
-	Mutex   sync.Mutex
-	Value   uint32
-	DB      Database
-	testing bool
+	Mutex     sync.Mutex
+	Value     uint32
+	DB        Database
+	testing   bool
+	namespace string
 }
 
 func (Count *Counter) Init(DB Database) {
@@ -19,7 +20,8 @@ func (Count *Counter) Init(DB Database) {
 	Count.Mutex.Lock()
 	defer Count.Mutex.Unlock()
 	if Count.DB != nil && Count.DB.IsInitialized() {
-		val, ok := Count.DB.Get("kvdb", "counter")
+		Count.namespace = Count.DB.GetSystemNS()
+		val, ok := Count.DB.Get(Count.namespace, "counter")
 		Count.Value = 0
 		logger.Debug("Get count from db", "function", "Init", "struct", "Counter", "value", val, "type", reflect.TypeOf(val))
 		if ok {
@@ -40,7 +42,7 @@ func (Count *Counter) GetCount() uint32 {
 	var currentCount = Count.Value
 	Count.Value = Count.Value + 1
 	if Count.DB != nil && Count.DB.IsInitialized() {
-		Count.DB.Set("kvdb", "counter", Count.Value)
+		Count.DB.Set(Count.namespace, "counter", Count.Value)
 	} else {
 		if !Count.testing {
 			logger.Error("Not initialized", "function", "GetCount", "struct", "Counter")

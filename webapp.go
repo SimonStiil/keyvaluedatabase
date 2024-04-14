@@ -19,18 +19,51 @@ import (
 )
 
 type Application struct {
-	Auth       Auth
-	Config     ConfigType
-	Count      *Counter
-	DB         Database
-	HTTPServer *http.Server
-	MTLSServer *http.Server
+	Auth         Auth
+	Config       ConfigType
+	Count        *Counter
+	DB           Database
+	HTTPServer   *http.Server
+	MTLSServer   *http.Server
+	APIEndpoints []API
 }
 
 var decoder = schema.NewDecoder()
 
 func (App *Application) RootControllerV1(w http.ResponseWriter, r *http.Request) {
+	requestcount := App.Count.GetCount()
+	request := GetRequestParameters(r, requestcount)
+	logger.Debug("Start",
+		"function", "RootControllerV1", "struct", "Application",
+		"id", request.ID, "address", request.RequestIP, "method", request.Method,
+		"path", request.orgRequest.URL.EscapedPath(), "namespace", request.Namespace)
+	for _, api := range App.APIEndpoints {
+		if api.APIPrefix() == request.Api {
 
+			logger.Debug("Select Api",
+				"function", "RootControllerV1", "struct", "Application",
+				"id", request.ID, "prefix", api.APIPrefix(),
+				"api", request.Api)
+
+			if App.Auth.Authentication(request) && request.Authentication.User.Autorization(
+				request,
+				api.Permissions(request)) {
+				logger.Debug("Auth Successful",
+					"function", "RootControllerV1", "struct", "Application",
+					"id", request.ID, "prefix", api.APIPrefix(),
+					"api", request.Api, "username", request.Basic.Username, "namespace", request.Namespace)
+				api.ApiController(w, request)
+				return
+			} else {
+				logger.Debug("Auth Failed",
+					"function", "RootControllerV1", "struct", "Application",
+					"id", request.ID, "prefix", api.APIPrefix(),
+					"api", request.Api, "username", request.Basic.Username, "namespace", request.Namespace)
+				App.Auth.ServeAuthFailed(w, request)
+			}
+
+		}
+	}
 }
 
 func (App *Application) decodeAny(r *http.Request, data any) error {
@@ -111,7 +144,7 @@ func (App *Application) ServeHTTP(mux *http.ServeMux) {
 		Addr:    ":" + App.Config.Port,
 		Handler: mux,
 	}
-	log.Printf("I Serving on port %v", App.Config.Port)
+	logger.Info(fmt.Sprintf("Serving on port %v", App.Config.Port))
 	log.Fatal(App.HTTPServer.ListenAndServe())
 }
 func checkFileExists(filePath string) bool {
@@ -126,19 +159,20 @@ func (App *Application) ServeHTTPMTLS(mux *http.ServeMux) {
 			Addr:    ":" + App.Config.MTLS.Port,
 			Handler: mux,
 		}
-		log.Printf("I Serving MTLS on port %v", App.Config.MTLS.Port)
+		logger.Info(fmt.Sprintf("Serving MTLS on port %v", App.Config.MTLS.Port))
 		log.Fatal(App.MTLSServer.ListenAndServe())
 	} else {
 		if !checkFileExists(App.Config.MTLS.CACertificate) {
-			log.Printf("E External MTLS not Enabled but no CACertificate exists: %v", App.Config.MTLS.CACertificate)
+			logger.Error(fmt.Sprintf("External MTLS not Enabled but no CACertificate exists: %v", App.Config.MTLS.CACertificate))
+
 			missingFile = true
 		}
 		if !checkFileExists(App.Config.MTLS.Certificate) {
-			log.Printf("E External MTLS not Enabled but no Certificate exists: %v", App.Config.MTLS.Certificate)
+			logger.Error(fmt.Sprintf("External MTLS not Enabled but no Certificate exists: %v", App.Config.MTLS.Certificate))
 			missingFile = true
 		}
 		if !checkFileExists(App.Config.MTLS.Key) {
-			log.Printf("E External MTLS not Enabled but no Key exists: %v", App.Config.MTLS.Key)
+			logger.Error(fmt.Sprintf("External MTLS not Enabled but no Key exists: %v", App.Config.MTLS.Key))
 			missingFile = true
 		}
 		if !missingFile {
@@ -157,7 +191,7 @@ func (App *Application) ServeHTTPMTLS(mux *http.ServeMux) {
 				TLSConfig: tlsConfig,
 				Handler:   mux,
 			}
-			log.Printf("I Serving MTLS on port %v", App.Config.MTLS.Port)
+			logger.Info(fmt.Sprintf("Serving MTLS on port %v", App.Config.MTLS.Port))
 			log.Fatal(App.MTLSServer.ListenAndServeTLS(App.Config.MTLS.Certificate, App.Config.MTLS.Key))
 		}
 	}

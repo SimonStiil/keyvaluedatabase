@@ -33,6 +33,10 @@ const (
 	Error    APIv1Type = 4
 )
 
+func (Api *APIv1) APIPrefix() string {
+	return "v1"
+}
+
 func (api *APIv1) ApiController(w http.ResponseWriter, request *RequestParameters) {
 	if request.Method == "UPDATE" || request.Method == "PATCH" {
 		data := rest.KVUpdateV2{}

@@ -11,6 +11,10 @@ type Systemv1 struct {
 	PrometheusHandler http.Handler
 }
 
+func (Api *Systemv1) APIPrefix() string {
+	return "system"
+}
+
 func (Api *Systemv1) ApiController(w http.ResponseWriter, request *RequestParameters) {
 	logger.Debug("Request - Start",
 		"function", "ApiController", "struct", "Systemv1",

@@ -25,37 +25,56 @@ type Auth struct {
 
 // https://www.alexedwards.net/blog/basic-authentication-in-go
 // https://medium.com/@matryer/the-http-handler-wrapper-technique-in-golang-updated-bc7fbcffa702
-func (Auth *Auth) Authentication(r *RequestParameters) {
-	user, ok := Auth.Users[r.Basic.Username]
+func (Auth *Auth) Authentication(request *RequestParameters) bool {
+	user, ok := Auth.Users[request.Basic.Username]
+	logger.Debug("Start",
+		"function", "Authentication", "struct", "Auth",
+		"id", request.ID, "basic.user", request.Basic.Username,
+		"basic.ok", request.Basic.Ok, "users.ok", ok)
 	if ok {
-		r.Authentication.User = &user
-		if r.Basic.Ok {
-			passwordHash := AuthHash(r.Basic.Password)
+		request.Authentication.User = &user
+		if request.Basic.Ok {
+			passwordHash := AuthHash(request.Basic.Password)
 			if AuthTest(passwordHash, user.PasswordEnc) {
-				r.Authentication.Verified.Password = true
+				request.Authentication.Verified.Password = true
 			}
-			r.RequestIP, _ = Auth.GetIPHeaderFromRequest(r.orgRequest)
-			if user.HostAllowed(r.RequestIP) {
-				r.Authentication.Verified.Host = true
+			request.RequestIP, _ = Auth.GetIPHeaderFromRequest(request.orgRequest)
+			if user.HostAllowed(request.RequestIP) {
+				request.Authentication.Verified.Host = true
 			}
+			if request.Authentication.Verified.Password && request.Authentication.Verified.Host {
+				return true
+			}
+			return request.Authentication.Verified.Ok()
 		}
 	}
+	return false
+}
+func (Auth *Auth) NoAuth(permissions *ConfigPermissions) bool {
+	return !permissions.List && !permissions.Read && !permissions.Write
 }
 
-func (User *User) Autorization(r *RequestParameters, permissions ConfigPermissions) bool {
-	if r.Api == "system" {
+func (User *User) Autorization(request *RequestParameters, permissions *ConfigPermissions) bool {
+	logger.Debug("Start",
+		"function", "Autorization", "struct", "Auth",
+		"id", request.ID, "api", request.Api)
+	if request.Api == "system" {
 		return true
 	}
-	userPermissions, ok := User.Permissions[r.Namespace]
+	userPermissions, ok := User.Permissions[request.Namespace]
+	logger.Debug("Read User Permissions",
+		"function", "ServeAuthFailed", "struct", "Auth",
+		"id", request.ID, "userPermissions", userPermissions, "expectedPermissions", permissions,
+		"forNamespace", ok, "namespace", request.Namespace)
 	if ok {
-		return AuthTestPermission(userPermissions, permissions)
+		return AuthTestPermission(userPermissions, *permissions)
 	} else {
-		return AuthTestPermission(User.GlobalPermissions, permissions)
+		return AuthTestPermission(User.GlobalPermissions, *permissions)
 	}
 }
 
 func (Auth *Auth) ServeAuthFailed(w http.ResponseWriter, request *RequestParameters) {
-	logger.Info("Auth Failed",
+	logger.Debug("Auth Failed",
 		"function", "ServeAuthFailed", "struct", "Auth",
 		"id", request.ID, "address", request.RequestIP,
 		"user", request.GetUserName(), "method", request.Method,
@@ -196,12 +215,17 @@ func (User *User) HostAllowed(address string) bool {
 }
 
 func AuthUnpack(Data ConfigUser) User {
+
+	logger.Debug("ReadingUser", "user", Data.Username, "function", "AuthUnpack")
 	user := User{
 		PasswordEnc: AuthDecode(Data.Password),
 		Permissions: make(map[string]ConfigPermissions),
 		Hosts:       Data.Hosts,
 	}
+	logger.Debug("Reading Permissionsset", "user", Data.Username, "function", "AuthUnpack", "size", len(Data.Permissionsset))
 	for _, permissionset := range Data.Permissionsset {
+
+		logger.Debug("Reading Permissionsset for Namespaces", "user", Data.Username, "function", "AuthUnpack", "size", len(permissionset.Namespaces), "namespaces", permissionset.Namespaces, "permissions", permissionset.Permissions)
 		for _, namespace := range permissionset.Namespaces {
 			if namespace == "*" {
 				user.GlobalPermissions = permissionset.Permissions

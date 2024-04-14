@@ -30,13 +30,13 @@ type ConfigMysql struct {
 }
 
 func MariaDBGetDefaults(configReader *viper.Viper) {
-	configReader.SetDefault("address", "localhost:3306")
-	configReader.SetDefault("username", "kvdb")
-	configReader.SetDefault("databaseName", "")
-	configReader.SetDefault("systemTableName", "kvdb")
-	configReader.SetDefault("envVariableName", BaseENVname+"_MYSQL_PASSWORD")
-	configReader.SetDefault("keyName", "key")
-	configReader.SetDefault("valueName", "value")
+	configReader.SetDefault("mysql.address", "localhost:3306")
+	configReader.SetDefault("mysql.username", "kvdb")
+	configReader.SetDefault("mysql.databaseName", "")
+	configReader.SetDefault("mysql.systemTableName", "kvdb")
+	configReader.SetDefault("mysql.envVariableName", BaseENVname+"_MYSQL_PASSWORD")
+	configReader.SetDefault("mysql.keyName", "key")
+	configReader.SetDefault("mysql.valueName", "value")
 }
 
 func (MDB *MariaDatabase) Init() {
@@ -92,7 +92,7 @@ func (MDB *MariaDatabase) Get(namespace string, key string) (string, bool) {
 	if !MDB.Initialized {
 		panic("F Unable to get. db not initialized()")
 	}
-	rows, err := MDB.Connection.Query(fmt.Sprintf("select * from `%v` where `%v` = ? ", MDB.Config.SystemTableName, MDB.Config.KeyName), key)
+	rows, err := MDB.Connection.Query(fmt.Sprintf("select * from `%v` where `%v` = ? ", namespace, MDB.Config.KeyName), key)
 
 	if err != nil {
 		logger.Error("Query failed with error", "function", "Get", "struct", "MariaDatabase", "namespace", namespace, "error", err)

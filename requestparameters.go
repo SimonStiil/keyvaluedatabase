@@ -15,11 +15,7 @@ type RequestParameters struct {
 	}
 	Authentication struct {
 		User     *User
-		Verified struct {
-			Password bool
-			Host     bool
-			mTLS     bool
-		}
+		Verified Verified
 	}
 	AttachmentPair   *rest.KVPairV2
 	AttachmentUpdate *rest.KVUpdateV2
@@ -29,7 +25,19 @@ type RequestParameters struct {
 	Key              string
 	orgRequest       *http.Request
 	RequestIP        string
-	ID               int
+	ID               uint32
+}
+type Verified struct {
+	Password bool
+	Host     bool
+	mTLS     bool
+}
+
+func (Verified *Verified) Ok() bool {
+	if Verified.mTLS {
+		return true
+	}
+	return Verified.Password && Verified.Host
 }
 
 func (RequestParameters *RequestParameters) GetUserName() string {
@@ -39,7 +47,7 @@ func (RequestParameters *RequestParameters) GetUserName() string {
 	return "anonymous"
 }
 
-func GetRequestParameters(r *http.Request, id int) *RequestParameters {
+func GetRequestParameters(r *http.Request, id uint32) *RequestParameters {
 	slashSeperated := strings.Split(r.URL.Path[1:], "/")
 	req := &RequestParameters{Method: r.Method, orgRequest: r, ID: id}
 	if len(slashSeperated) > 0 {

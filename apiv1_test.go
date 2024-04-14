@@ -18,7 +18,7 @@ import (
 
 func TestApiV1(t *testing.T) {
 	setupTestlogging()
-	requestsCount := 0
+	var requestsCount uint32 = 0
 	App = new(Application)
 	api := new(APIv1)
 	t.Run("Initialize DB for Tests", func(t *testing.T) {

@@ -98,7 +98,8 @@ func ConfigRead(configFileName string, configOutput *ConfigType) {
 	configReader.SetEnvPrefix(BaseENVname)
 	MariaDBGetDefaults(configReader)
 	RedisDBGetDefaults(configReader)
-	configReader.SetDefault("log", false)
+	configReader.SetDefault("logging.level", "Debug")
+	configReader.SetDefault("logging.format", "text")
 	configReader.SetDefault("port", 8080)
 	configReader.SetDefault("databaseType", "yaml")
 	configReader.SetDefault("prometheus.enabled", true)
@@ -141,6 +142,7 @@ func setupLogging(Logging ConfigLogging) {
 		logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: loggingLevel}))
 	}
 	logger.Info("Logging started with options", "format", Logging.Format, "level", Logging.Level, "function", "setupLogging")
+	slog.SetDefault(logger)
 }
 
 func setupTestlogging() {
@@ -178,9 +180,11 @@ func main() {
 	}
 	App.Count = &Counter{}
 	App.Count.Init(App.DB)
+	App.Auth.Init(App.Config)
+	App.APIEndpoints = []API{&Systemv1{}, &APIv1{}}
 	defer App.DB.Close()
 	if App.Config.Prometheus.Enabled {
-		logger.Info(fmt.Sprintf("Metrics enabled at %v\n", App.Config.Prometheus.Endpoint), "function", "main")
+		logger.Info(fmt.Sprintf("Metrics enabled at %v", App.Config.Prometheus.Endpoint), "function", "main")
 		http.Handle(App.Config.Prometheus.Endpoint, promhttp.Handler())
 	}
 	regularServerMux := http.NewServeMux()
