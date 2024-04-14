@@ -5,6 +5,11 @@ type KVPairV2 struct {
 	Namespace string `json:"namespace"`
 	Value     string `json:"value"`
 }
+type NamespaceV2 struct {
+	Name   string `json:"name"`
+	Access bool   `json:"access"`
+	Size   int    `json:"size"`
+}
 
 type KVUpdateV2 struct {
 	Key       string `json:"key"`

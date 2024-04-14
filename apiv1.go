@@ -5,21 +5,7 @@ import (
 	"net/http"
 
 	"github.com/SimonStiil/keyvaluedatabase/rest"
-	/*
-		"crypto/tls"
-		"crypto/x509"
-		"errors"
-		"fmt"
-		"io"
-		"log"
-		"net/http"
-		"os"
-		"reflect"
-		"runtime"
-		"strings"
-
-		"github.com/gorilla/schema"
-	*/)
+)
 
 type APIv1 struct {
 }
@@ -27,10 +13,11 @@ type APIv1 struct {
 type APIv1Type uint
 
 const (
-	List     APIv1Type = 0
-	FullList APIv1Type = 1
-	Key      APIv1Type = 2
-	Error    APIv1Type = 4
+	List               APIv1Type = 0
+	FullListKeys       APIv1Type = 1
+	Key                APIv1Type = 2
+	Error              APIv1Type = 4
+	FullListNamespaces APIv1Type = 5
 )
 
 func (Api *APIv1) APIPrefix() string {
@@ -58,10 +45,12 @@ func (api *APIv1) ApiController(w http.ResponseWriter, request *RequestParameter
 		request.AttachmentPair = &data
 	}
 	switch api.GetRequestType(request) {
-	case FullList:
-		api.fullList(w, request)
+	case FullListKeys:
+		api.fullListKeys(w, request)
 	case List:
 		api.list(w, request)
+	case FullListNamespaces:
+		api.fullListNamespaces(w, request)
 	case Key:
 		api.key(w, request)
 	}
@@ -105,8 +94,11 @@ func (api *APIv1) GetRequestType(request *RequestParameters) APIv1Type {
 			}
 		}
 	}
+	if request.Namespace == "*" && request.Key == "" {
+		return FullListNamespaces
+	}
 	if len(request.Namespace) > 0 && request.Key == "*" {
-		return FullList
+		return FullListKeys
 	}
 	if request.Namespace == "" || request.Key == "" {
 		return List
@@ -114,8 +106,8 @@ func (api *APIv1) GetRequestType(request *RequestParameters) APIv1Type {
 	return Key
 }
 
-func (api *APIv1) fullList(w http.ResponseWriter, request *RequestParameters) {
-	logger.Info("Full List Request",
+func (api *APIv1) fullListKeys(w http.ResponseWriter, request *RequestParameters) {
+	logger.Info("Full List Keys Request",
 		"function", "list", "struct", "APIv1",
 		"id", request.ID, "address", request.RequestIP,
 		"user", request.GetUserName(), "method", request.Method,
@@ -132,6 +124,29 @@ func (api *APIv1) fullList(w http.ResponseWriter, request *RequestParameters) {
 				"id", request.ID, "key", key)
 		}
 	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(fullList)
+}
+
+func (api *APIv1) fullListNamespaces(w http.ResponseWriter, request *RequestParameters) {
+	logger.Info("Full List Namespaces Request",
+		"function", "list", "struct", "APIv1",
+		"id", request.ID, "address", request.RequestIP,
+		"user", request.GetUserName(), "method", request.Method,
+		"path", request.orgRequest.URL.EscapedPath(), "status", 200)
+	content := App.DB.Keys("")
+	requestOrgNamespace := request.Namespace
+	testPermissons := ConfigPermissions{Read: true, List: true, Write: false}
+	user := request.Authentication.User
+	var fullList []rest.NamespaceV2
+	for _, namespace := range content {
+		keys := App.DB.Keys(namespace)
+		request.Namespace = namespace
+		access := user.Autorization(request, &testPermissons)
+		fullList = append(fullList, rest.NamespaceV2{Name: namespace, Size: len(keys), Access: access})
+	}
+	request.Namespace = requestOrgNamespace
+	logger.Info("Full List Namespaces", "reply", fullList)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(fullList)
 }
@@ -291,7 +306,7 @@ func (api *APIv1) key(w http.ResponseWriter, request *RequestParameters) {
 
 func (api *APIv1) Permissions(request *RequestParameters) *ConfigPermissions {
 	switch api.GetRequestType(request) {
-	case FullList:
+	case FullListKeys:
 		return &ConfigPermissions{List: true, Read: true}
 	case List:
 		return &ConfigPermissions{List: true}
