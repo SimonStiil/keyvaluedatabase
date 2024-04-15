@@ -100,7 +100,7 @@ func (api *APIv1) GetRequestType(request *RequestParameters) APIv1Type {
 	if len(request.Namespace) > 0 && request.Key == "*" {
 		return FullListKeys
 	}
-	if request.Namespace == "" || request.Key == "" {
+	if request.Method == "GET" && (request.Namespace == "" || request.Key == "") {
 		return List
 	}
 	return Key
@@ -247,8 +247,11 @@ func (api *APIv1) key(w http.ResponseWriter, request *RequestParameters) {
 			"id", request.ID, "namespace", request.Namespace,
 			"key", request.Key, "metod", request.Method,
 			"update.key", request.AttachmentUpdate.Key, "update.type", request.AttachmentUpdate.Type)
-
-		newData := rest.KVPairV2{Key: request.Key, Namespace: request.Namespace, Value: AuthGenerateRandomString(32)}
+		newKey := request.Key
+		if request.Key == "" {
+			newKey = AuthGenerateRandomString(16)
+		}
+		newData := rest.KVPairV2{Key: newKey, Namespace: request.Namespace, Value: AuthGenerateRandomString(32)}
 
 		logger.Debug("UPDATE random",
 			"function", "key", "struct", "APIv1",
