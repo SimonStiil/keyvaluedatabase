@@ -56,11 +56,11 @@ func (MDB *MariaDatabase) Init() {
 	if err != nil {
 		panic(err.Error())
 	}
-  _, err =  MDB.Connection.Exec(fmt.Sprintf("CREATE TABLE IF NOT EXISTS `%v` ( `%v` CHAR(%v) PRIMARY KEY, `%v` VARCHAR(%v) NOT NULL) ENGINE = InnoDB; ", MDB.Config.SystemTableName, MDB.Config.KeyName, rest.KeyMaxLength, MDB.Config.ValueName, rest.ValueMaxLength))
+	_, err = MDB.Connection.Exec(fmt.Sprintf("CREATE TABLE IF NOT EXISTS `%v` ( `%v` CHAR(%v) PRIMARY KEY, `%v` VARCHAR(%v) NOT NULL) ENGINE = InnoDB; ", MDB.Config.SystemTableName, MDB.Config.KeyName, rest.KeyMaxLength, MDB.Config.ValueName, rest.ValueMaxLength))
 	if err != nil {
 		panic(err.Error())
 	}
-  MDB.createTable(MDB.GetSystemNS())
+	MDB.createTable(MDB.GetSystemNS())
 	logger.Debug("Initialization complete", "function", "Init", "struct", "MariaDatabase")
 	MDB.Initialized = true
 }
@@ -101,7 +101,7 @@ func (MDB *MariaDatabase) Get(namespace string, key string) (string, bool) {
 		logger.Error("Query failed with error", "function", "Get", "struct", "MariaDatabase", "namespace", namespace, "error", err)
 	}
 	defer rows.Close()
-	kvpair := rest.KVPairV2{Namespace: namespace}
+	kvpair := rest.KVPairV1{}
 	found := false
 	for rows.Next() {
 		err = rows.Scan(&kvpair.Key, &kvpair.Value)

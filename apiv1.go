@@ -34,15 +34,43 @@ func (api *APIv1) ApiController(w http.ResponseWriter, request *RequestParameter
 				"id", request.ID, "error", err)
 		}
 		request.AttachmentUpdate = &data
-	} else {
-		data := rest.KVPairV2{}
-		err := App.decodeAny(request.orgRequest, &data)
-		if err != nil {
-			logger.Info("Unable to decodeAny",
-				"function", "ApiController", "struct", "APIv1",
-				"id", request.ID, "error", err)
+		if request.Namespace == "" && request.AttachmentUpdate.Namespace != "" {
+			request.Namespace = request.AttachmentUpdate.Namespace
+		} else {
+			if request.Namespace != "" && request.AttachmentUpdate.Namespace != "" &&
+				request.Namespace != request.AttachmentUpdate.Namespace {
+				return Error
+			}
 		}
-		request.AttachmentPair = &data
+		if request.Key == "" && request.AttachmentUpdate.Key != "" {
+			request.Key = request.AttachmentUpdate.Key
+		} else {
+			if request.Key != "" && request.AttachmentUpdate.Key != "" &&
+				request.Key != request.AttachmentUpdate.Key {
+				return Error
+			}
+		}
+	} else {
+		if request.Namespace != "" {
+			data := rest.KVPairV2{}
+			err := App.decodeAny(request.orgRequest, &data)
+			if err != nil {
+				logger.Info("Unable to decodeAny",
+					"function", "ApiController", "struct", "APIv1",
+					"id", request.ID, "error", err)
+			}
+			request.AttachmentPair = &data
+		} else {
+			data := rest.NamespaceV2{}
+			err := App.decodeAny(request.orgRequest, &data)
+			if err != nil {
+				logger.Info("Unable to decodeAny",
+					"function", "ApiController", "struct", "APIv1",
+					"id", request.ID, "error", err)
+			}
+			request.AttachmentNamespace = &data
+
+		}
 	}
 	switch api.GetRequestType(request) {
 	case FullListKeys:

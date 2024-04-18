@@ -17,15 +17,14 @@ type RequestParameters struct {
 		User     *User
 		Verified Verified
 	}
-	AttachmentPair   *rest.KVPairV2
-	AttachmentUpdate *rest.KVUpdateV2
-	Method           string
-	Api              string
-	Namespace        string
-	Key              string
-	orgRequest       *http.Request
-	RequestIP        string
-	ID               uint32
+	Attachment *rest.ObjectV1
+	Method     string
+	Api        string
+	Namespace  string
+	Key        string
+	orgRequest *http.Request
+	RequestIP  string
+	ID         uint32
 }
 type Verified struct {
 	Password bool

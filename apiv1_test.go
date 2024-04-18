@@ -21,6 +21,7 @@ func TestApiV1(t *testing.T) {
 	var requestsCount uint32 = 0
 	App = new(Application)
 	api := new(APIv1)
+	URLPrefix := "/" + api.APIPrefix()
 	t.Run("Initialize DB for Tests", func(t *testing.T) {
 		fileName := "testdb.yaml"
 		err := os.Remove(fileName)
@@ -39,7 +40,7 @@ func TestApiV1(t *testing.T) {
 		if err != nil {
 			t.Fatalf("impossible to marshall teacher: %s", err)
 		}
-		request, _ := http.NewRequest(http.MethodPost, "/", bytes.NewReader(marshalled))
+		request, _ := http.NewRequest(http.MethodPost, URLPrefix, bytes.NewReader(marshalled))
 		request.Header.Set("Content-Type", "application/json")
 		response := httptest.NewRecorder()
 		requestParameters := GetRequestParameters(request, requestsCount)
@@ -61,7 +62,7 @@ func TestApiV1(t *testing.T) {
 	t.Run("POST(www-form)", func(t *testing.T) {
 		request, _ := http.NewRequest(
 			http.MethodPost,
-			fmt.Sprintf("/v1/%v/%v", testData.Namespace, testData.Key),
+			fmt.Sprintf("%v/%v/%v", URLPrefix, testData.Namespace, testData.Key),
 			strings.NewReader(
 				fmt.Sprintf("value=%v", testData.Value)))
 		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -85,7 +86,7 @@ func TestApiV1(t *testing.T) {
 	t.Run("POST(raw)", func(t *testing.T) {
 		request, _ := http.NewRequest(
 			http.MethodPost,
-			fmt.Sprintf("/v1/%v/%v", testData.Namespace, testData.Key),
+			fmt.Sprintf("%v/%v/%v", URLPrefix, testData.Namespace, testData.Key),
 			strings.NewReader(testData.Value))
 		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		response := httptest.NewRecorder()
@@ -108,7 +109,7 @@ func TestApiV1(t *testing.T) {
 	t.Run("PUT(raw)", func(t *testing.T) {
 		request, _ := http.NewRequest(
 			http.MethodPut,
-			fmt.Sprintf("/v1/%v/%v", testData.Namespace, testData.Key),
+			fmt.Sprintf("%v/%v/%v", URLPrefix, testData.Namespace, testData.Key),
 			strings.NewReader(testData.Value))
 		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		response := httptest.NewRecorder()
@@ -130,7 +131,7 @@ func TestApiV1(t *testing.T) {
 	t.Run("List keys", func(t *testing.T) {
 
 		request, _ := http.NewRequest(http.MethodGet,
-			fmt.Sprintf("/v1/%v", testData.Namespace),
+			fmt.Sprintf("%v/%v", URLPrefix, testData.Namespace),
 			nil)
 		response := httptest.NewRecorder()
 		requestParameters := GetRequestParameters(request, requestsCount)
@@ -155,7 +156,7 @@ func TestApiV1(t *testing.T) {
 	})
 	t.Run("Get", func(t *testing.T) {
 		request, _ := http.NewRequest(http.MethodGet,
-			fmt.Sprintf("/v1/%v/%v", testData.Namespace, testData.Key),
+			fmt.Sprintf("%v/%v/%v", URLPrefix, testData.Namespace, testData.Key),
 			nil)
 		response := httptest.NewRecorder()
 		requestParameters := GetRequestParameters(request, requestsCount)
@@ -180,7 +181,7 @@ func TestApiV1(t *testing.T) {
 	t.Run("ListAll keys", func(t *testing.T) {
 
 		request, _ := http.NewRequest(http.MethodGet,
-			fmt.Sprintf("/v1/%v/*", testData.Namespace),
+			fmt.Sprintf("%v/%v/*", URLPrefix, testData.Namespace),
 			nil)
 		response := httptest.NewRecorder()
 		requestParameters := GetRequestParameters(request, requestsCount)
@@ -214,7 +215,7 @@ func TestApiV1(t *testing.T) {
 	})
 	t.Run("Get (not-Existing)", func(t *testing.T) {
 		request, _ := http.NewRequest(http.MethodGet,
-			fmt.Sprintf("/v1/%v/fake", testData.Namespace),
+			fmt.Sprintf("%v/%v/fake", URLPrefix, testData.Namespace),
 			nil)
 		response := httptest.NewRecorder()
 		requestParameters := GetRequestParameters(request, requestsCount)
@@ -224,9 +225,33 @@ func TestApiV1(t *testing.T) {
 			t.Errorf(".Code got %v, want %v", response.Code, http.StatusNotFound)
 		}
 	})
+	testNamespace := rest.NamespaceV2{Name: "newNamespace"}
+	t.Run("Creae Namespace POST(json)", func(t *testing.T) {
+		marshalled, err := json.Marshal(testNamespace)
+		if err != nil {
+			t.Fatalf("impossible to marshall teacher: %s", err)
+		}
+		request, _ := http.NewRequest(http.MethodPost, URLPrefix, bytes.NewReader(marshalled))
+		request.Header.Set("Content-Type", "application/json")
+		response := httptest.NewRecorder()
+		requestParameters := GetRequestParameters(request, requestsCount)
+		requestsCount += 1
+		api.ApiController(response, requestParameters)
+		b, err := io.ReadAll(response.Body)
+		if err != nil {
+			t.Errorf("Error Reading body %v", err)
+		}
+		//t.Logf("Body: %v, Status: %v", string(b), response.Code)
+		if response.Code != http.StatusCreated {
+			t.Errorf(".Code got %q, want %q", response.Code, http.StatusCreated)
+		}
+		if string(b) != okBody {
+			t.Errorf(".Body got %q, want %q", string(b), okBody)
+		}
+	})
 	t.Run("List namespaces", func(t *testing.T) {
 
-		request, _ := http.NewRequest(http.MethodGet, "/v1", nil)
+		request, _ := http.NewRequest(http.MethodGet, URLPrefix, nil)
 		response := httptest.NewRecorder()
 		requestParameters := GetRequestParameters(request, requestsCount)
 		requestsCount += 1
@@ -244,8 +269,54 @@ func TestApiV1(t *testing.T) {
 		if !slices.Contains(listReply, testData.Namespace) {
 			t.Errorf("list should contain: %v", testData.Namespace)
 		}
+		if !slices.Contains(listReply, testNamespace.Name) {
+			t.Errorf("list should contain: %v", testNamespace.Name)
+		}
 		if slices.Contains(listReply, App.DB.GetSystemNS()) {
 			t.Errorf("list should not contain: %v", App.DB.GetSystemNS())
+		}
+	})
+
+	t.Run("Delete Namespace", func(t *testing.T) {
+		request, _ := http.NewRequest(http.MethodDelete,
+			fmt.Sprintf("%v/%v", URLPrefix, testNamespace.Name),
+			nil)
+		request.Header.Set("Content-Type", "application/json")
+		response := httptest.NewRecorder()
+		requestParameters := GetRequestParameters(request, requestsCount)
+		requestsCount += 1
+		api.ApiController(response, requestParameters)
+		b, err := io.ReadAll(response.Body)
+		if err != nil {
+			t.Errorf("Error Reading body %v", err)
+		}
+		//t.Logf("Body: %v, Status: %v", string(b), response.Code)
+		if response.Code != http.StatusOK {
+			t.Errorf(".Code got %q, want %q", response.Code, http.StatusOK)
+		}
+		if string(b) != okBody {
+			t.Errorf(".Body got %q, want %q", string(b), okBody)
+		}
+	})
+	t.Run("List namespaces Delete Test", func(t *testing.T) {
+
+		request, _ := http.NewRequest(http.MethodGet, URLPrefix, nil)
+		response := httptest.NewRecorder()
+		requestParameters := GetRequestParameters(request, requestsCount)
+		requestsCount += 1
+		api.ApiController(response, requestParameters)
+		if response.Code != http.StatusOK {
+			t.Errorf(".Code got %q, want %q", response.Code, http.StatusOK)
+		}
+		var listReply []string
+		err := json.Unmarshal(response.Body.Bytes(), &listReply)
+		if err != nil {
+			t.Error(err)
+		}
+		//t.Log(listReply)
+
+		if slices.Contains(listReply, testNamespace.Name) {
+			t.Errorf("list should not contain: %v", testNamespace.Name)
 		}
 	})
 	config := ConfigType{}
@@ -254,7 +325,7 @@ func TestApiV1(t *testing.T) {
 	TestUsername := "test"
 	TestPassword := "testpassword"
 	t.Run("List namespaces full", func(t *testing.T) {
-		request, _ := http.NewRequest(http.MethodGet, "/v1/*", nil)
+		request, _ := http.NewRequest(http.MethodGet, URLPrefix+"/*", nil)
 		request.SetBasicAuth(TestUsername, TestPassword)
 		response := httptest.NewRecorder()
 		requestParameters := GetRequestParameters(request, requestsCount)
@@ -303,5 +374,51 @@ func TestApiV1(t *testing.T) {
 		if foundSystemNS {
 			t.Errorf("list should not contain: %v", App.DB.GetSystemNS())
 		}
+		t.Run("Delete key", func(t *testing.T) {
+			request, _ := http.NewRequest(http.MethodDelete,
+				fmt.Sprintf("%v/%v/%v", URLPrefix, testData.Namespace, testData.Key),
+				nil)
+			request.Header.Set("Content-Type", "application/json")
+			response := httptest.NewRecorder()
+			requestParameters := GetRequestParameters(request, requestsCount)
+			requestsCount += 1
+			api.ApiController(response, requestParameters)
+			b, err := io.ReadAll(response.Body)
+			if err != nil {
+				t.Errorf("Error Reading body %v", err)
+			}
+			//t.Logf("Body: %v, Status: %v", string(b), response.Code)
+			if response.Code != http.StatusOK {
+				t.Errorf(".Code got %q, want %q", response.Code, http.StatusOK)
+			}
+			if string(b) != okBody {
+				t.Errorf(".Body got %q, want %q", string(b), okBody)
+			}
+		})
+		t.Run("Get - Post delete test", func(t *testing.T) {
+			request, _ := http.NewRequest(http.MethodGet,
+				fmt.Sprintf("%v/%v/%v", URLPrefix, testData.Namespace, testData.Key),
+				nil)
+			response := httptest.NewRecorder()
+			requestParameters := GetRequestParameters(request, requestsCount)
+			requestsCount += 1
+			api.ApiController(response, requestParameters)
+			if response.Code != http.StatusNotFound {
+				t.Errorf(".Code got %q, want %q", response.Code, http.StatusNotFound)
+				var replyPair rest.KVPairV2
+				err := json.Unmarshal(response.Body.Bytes(), &replyPair)
+				if err != nil {
+					t.Error(err)
+				}
+
+				if replyPair.Key != testData.Key {
+					t.Errorf(".Key got %q, want %q", replyPair.Key, testData.Key)
+				}
+				if replyPair.Value != testData.Value {
+					t.Errorf(".Value got %q, want %q", replyPair.Value, testData.Value)
+				}
+			}
+
+		})
 	})
 }
