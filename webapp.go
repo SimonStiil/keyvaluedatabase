@@ -83,10 +83,10 @@ func (App *Application) decodeAny(r *http.Request, data any) error {
 			}
 			defer r.Body.Close()
 			body := string(bodyBytes)
-			if strings.Contains(body, "key=") || strings.Contains(body, "value=") {
+			if strings.Contains(body, "type=") || strings.Contains(body, "value=") {
 				return App.decodeXWWWForm(r, data)
 			}
-			construct := data.(*rest.KVPairV2)
+			construct := data.(*rest.ObjectV1)
 			construct.Value = body
 			return nil
 		}
