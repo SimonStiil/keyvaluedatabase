@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -25,6 +26,10 @@ type RequestParameters struct {
 	orgRequest *http.Request
 	RequestIP  string
 	ID         uint32
+	Logger     struct {
+		Log *slog.Logger
+		Ext *slog.Logger
+	}
 }
 type Verified struct {
 	Password bool
@@ -47,6 +52,7 @@ func (RequestParameters *RequestParameters) GetUserName() string {
 }
 
 func GetRequestParameters(r *http.Request, id uint32) *RequestParameters {
+
 	slashSeperated := strings.Split(r.URL.Path[1:], "/")
 	req := &RequestParameters{Method: r.Method, orgRequest: r, ID: id}
 	if len(slashSeperated) > 0 {
@@ -66,5 +72,7 @@ func GetRequestParameters(r *http.Request, id uint32) *RequestParameters {
 	} else {
 		req.Basic.Username, req.Basic.Password, req.Basic.Ok = r.BasicAuth()
 	}
+	req.Logger.Ext = debugLogger.With("id", id, "method", r.Method, "path", r.URL.EscapedPath(), "api", req.Api, "namespace", req.Namespace, "key", req.Key, "basic.user", req.Basic.Username)
+	req.Logger.Log = logger.With("id", id, "method", r.Method, "path", r.URL.EscapedPath())
 	return req
 }

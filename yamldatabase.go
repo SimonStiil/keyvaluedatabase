@@ -98,7 +98,7 @@ func (DB *YamlDatabase) Get(namespace string, key string) (string, error) {
 	}
 	// https://stackoverflow.com/questions/27545270/how-to-get-a-value-from-map
 	if _, ok := DB.Data[namespace]; !ok {
-		return "", fmt.Errorf("Namespace not found %v", namespace)
+		return "", fmt.Errorf("namespace not found %v", namespace)
 	}
 	value, ok := DB.Data[namespace][key]
 	if ok {

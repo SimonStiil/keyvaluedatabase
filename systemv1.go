@@ -16,14 +16,12 @@ func (Api *Systemv1) APIPrefix() string {
 }
 
 func (Api *Systemv1) ApiController(w http.ResponseWriter, request *RequestParameters) {
-	logger.Debug("Request - Start",
-		"function", "ApiController", "struct", "Systemv1",
-		"id", request.ID, "address", request.RequestIP,
-		"user", request.GetUserName(), "method", request.Method,
-		"path", request.orgRequest.URL.EscapedPath(), "namespace", request.Namespace)
+	debugLogger := request.Logger.Ext.With("function", "ApiController")
+	debugLogger.Debug("ControllerStart")
 	switch request.Namespace {
 	case "metrics":
 		if Api.PrometheusHandler != nil {
+			debugLogger.Debug("MetricsRequest")
 			Api.PrometheusHandler.ServeHTTP(w, request.orgRequest)
 			return
 		}
@@ -32,6 +30,7 @@ func (Api *Systemv1) ApiController(w http.ResponseWriter, request *RequestParame
 			requests.WithLabelValues(request.orgRequest.URL.EscapedPath(), request.Method).Inc()
 		}
 		reply := rest.HealthV1{Status: "UP", Requests: int(App.Count.PeakCount())}
+		debugLogger.Debug("HealthRequest")
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(reply)
 		return
@@ -40,6 +39,8 @@ func (Api *Systemv1) ApiController(w http.ResponseWriter, request *RequestParame
 }
 
 func (api *Systemv1) Permissions(request *RequestParameters) *ConfigPermissions {
+	debugLogger := request.Logger.Ext.With("function", "Permissions")
+	debugLogger.Debug("ApiPermissions")
 	switch request.Namespace {
 	case "metrics":
 		return &ConfigPermissions{}

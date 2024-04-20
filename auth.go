@@ -6,8 +6,8 @@ import (
 	"crypto/subtle"
 	b64 "encoding/base64"
 	"fmt"
+	"log/slog"
 	"net"
-	"net/http"
 	"os"
 
 	"github.com/netinternet/remoteaddr"
@@ -27,10 +27,8 @@ type Auth struct {
 // https://medium.com/@matryer/the-http-handler-wrapper-technique-in-golang-updated-bc7fbcffa702
 func (Auth *Auth) Authentication(request *RequestParameters) bool {
 	user, ok := Auth.Users[request.Basic.Username]
-	logger.Debug("Start",
-		"function", "Authentication", "struct", "Auth",
-		"id", request.ID, "basic.user", request.Basic.Username,
-		"basic.ok", request.Basic.Ok, "users.ok", ok)
+	debugLogger := request.Logger.Ext.With("function", "Authentication")
+	debugLogger.Debug(fmt.Sprintf("User in database : %v", ok), "found", ok)
 	if ok {
 		request.Authentication.User = &user
 		if request.Basic.Ok {
@@ -38,8 +36,8 @@ func (Auth *Auth) Authentication(request *RequestParameters) bool {
 			if AuthTest(passwordHash, user.PasswordEnc) {
 				request.Authentication.Verified.Password = true
 			}
-			request.RequestIP, _ = Auth.GetIPHeaderFromRequest(request.orgRequest)
-			if user.HostAllowed(request.RequestIP) {
+			request.RequestIP, _ = Auth.GetIPHeaderFromRequest(request)
+			if user.HostAllowed(request.RequestIP, request.Logger.Ext) {
 				request.Authentication.Verified.Host = true
 			}
 			if request.Authentication.Verified.Password && request.Authentication.Verified.Host {
@@ -55,17 +53,15 @@ func (Auth *Auth) NoAuth(permissions *ConfigPermissions) bool {
 }
 
 func (User *User) Autorization(request *RequestParameters, permissions *ConfigPermissions) bool {
-	logger.Debug("Start",
-		"function", "Autorization", "struct", "Auth",
-		"id", request.ID, "api", request.Api)
+	debugLogger := request.Logger.Ext.With("function", "Autorization")
 	if request.Api == "system" {
+		debugLogger.Debug("Skipping Auth for system api")
 		return true
 	}
 	userPermissions, ok := User.Permissions[request.Namespace]
-	logger.Debug("Read User Permissions",
-		"function", "ServeAuthFailed", "struct", "Auth",
-		"id", request.ID, "userPermissions", userPermissions, "expectedPermissions", permissions,
-		"forNamespace", ok, "namespace", request.Namespace)
+	debugLogger.Debug("Testing User Permissions",
+		"userPermissions", userPermissions, "expectedPermissions", permissions,
+		"gobal", !ok)
 	if ok {
 		return AuthTestPermission(userPermissions, *permissions)
 	} else {
@@ -73,40 +69,37 @@ func (User *User) Autorization(request *RequestParameters, permissions *ConfigPe
 	}
 }
 
-func (Auth *Auth) ServeAuthFailed(w http.ResponseWriter, request *RequestParameters) {
-	logger.Debug("Auth Failed",
-		"function", "ServeAuthFailed", "struct", "Auth",
-		"id", request.ID, "address", request.RequestIP,
-		"user", request.GetUserName(), "method", request.Method,
-		"path", request.orgRequest.URL.EscapedPath(), "namespace", request.Namespace, "status", 403)
-	w.Header().Set("WWW-Authenticate", `Basic realm="restricted", charset="UTF-8"`)
-	http.Error(w, "Unauthorized", http.StatusUnauthorized)
-}
-
-func (Auth *Auth) GetIPHeaderFromRequest(r *http.Request) (string, string) {
-	address, _ := remoteaddr.Parse().IP(r)
+func (Auth *Auth) GetIPHeaderFromRequest(request *RequestParameters) (string, string) {
+	debugLogger := request.Logger.Ext.With("function", "GetIPHeaderFromRequest")
+	address, _ := remoteaddr.Parse().IP(request.orgRequest)
 	foundHeaderName := "remoteaddr"
 
-	logger.Debug("Remote address: "+address, "function", "GetIPHeaderFromRequest", "struct", "Auth")
+	debugLogger.Debug("Remote address: " + address)
 	var trustedProxy bool
 	for _, proxyAddress := range Auth.Config.TrustedProxies {
 		if proxyAddress == address {
-			logger.Debug(address+" is a trusted proxy", "function", "GetIPHeaderFromRequest", "struct", "Auth")
+			debugLogger.Debug("Remote address is a trusted proxy")
 			trustedProxy = true
 			break
 		}
 	}
 	if trustedProxy {
 		for _, headerName := range Auth.HostHeaders {
-			header := r.Header[headerName]
+			header := request.orgRequest.Header[headerName]
 			if len(header) > 0 {
-				logger.Debug(fmt.Sprintf("Found address in headder [%v] = %v", headerName, header[0]), "function", "GetIPHeaderFromRequest", "struct", "Auth")
+				debugLogger.Debug(fmt.Sprintf("Found address in headder [%v] = %v", headerName, header[0]))
+				request.Logger.Ext = request.Logger.Ext.With("address", header[0], "proxy", address, "proxy-header", headerName)
+				request.Logger.Log = request.Logger.Log.With("address", header[0], "proxy", address)
 				return header[0], headerName
 			}
 		}
 	} else {
-		logger.Debug(address+" is not a trusted proxy - skipping headders", "function", "GetIPHeaderFromRequest", "struct", "Auth")
+		if len(Auth.Config.TrustedProxies) > 0 {
+			logger.Debug("Remote address is not a trusted proxy")
+		}
 	}
+	request.Logger.Ext = request.Logger.Ext.With("address", address)
+	request.Logger.Log = request.Logger.Log.With("address", address)
 	return address, foundHeaderName
 }
 
@@ -178,39 +171,41 @@ type User struct {
 	Hosts             []string
 }
 
-func (User *User) HostAllowed(address string) bool {
+func (User *User) HostAllowed(address string, dLogger *slog.Logger) bool {
+	debugLogger := dLogger.With("function", "HostAllowed", "struct", "User")
+
 	ip := net.ParseIP(address)
 	for _, host := range User.Hosts {
 		_, testSubnet, _ := net.ParseCIDR(host)
 		if testSubnet != nil {
 			if testSubnet.Contains(ip) {
-				logger.Debug("matched CIDR for for host: "+host, "function", "HostAllowed", "struct", "User")
+				debugLogger.Debug("matched CIDR for for host: " + host)
 				return true
 			}
 		} else {
 			testIP := net.ParseIP(host)
 			if testIP != nil {
 				if ip.Equal(testIP) {
-					logger.Debug("matched IP for for host: "+host, "function", "HostAllowed", "struct", "User")
+					debugLogger.Debug("matched IP for for host: " + host)
 					return true
 				}
 			} else {
 				testIPs, err := net.LookupIP(host)
 				if err != nil {
-					logger.Error("Failed to parse address for DNS: "+host, "function", "HostAllowed", "struct", "User", "error", err)
+					debugLogger.Error("Failed to parse address for DNS: "+host, "error", err)
 					continue
 				}
 				for _, testIP := range testIPs {
-					logger.Debug(fmt.Sprintf("DNS Lookup for for domain %s resolved to %s ", host, testIP.String()), "function", "HostAllowed", "struct", "User")
+					debugLogger.Debug(fmt.Sprintf("DNS Lookup for for domain %s resolved to %s ", host, testIP.String()))
 					if ip.Equal(testIP) {
-						logger.Debug(fmt.Sprintf("Matched DNS Lookup for host %s ", host), "function", "HostAllowed", "struct", "User")
+						debugLogger.Debug(fmt.Sprintf("Matched DNS Lookup for host %s ", host))
 						return true
 					}
 				}
 			}
 		}
 	}
-	logger.Debug(address+" not matched to any of users hosts", "function", "HostAllowed", "struct", "User")
+	debugLogger.Debug(address + " not matched to any of users hosts")
 	return false
 }
 
@@ -237,15 +232,6 @@ func AuthUnpack(Data ConfigUser) User {
 	return user
 }
 
-/*
-	func AuthPack(Name string, Data User) ConfigUser {
-		return ConfigUser{
-			Username:    Name,
-			Password:    AuthEncode(Data.PasswordEnc),
-			Permissions: Data.Permissions,
-		}
-	}
-*/
 func AuthTestPermission(permission ConfigPermissions, expected ConfigPermissions) bool {
 	return ((!expected.Read || permission.Read) &&
 		(!expected.Write || permission.Write) &&

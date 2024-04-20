@@ -86,22 +86,22 @@ func Test_Auth(t *testing.T) {
 
 	ip := "192.168.0.1"
 	t.Run(fmt.Sprintf("normal ip %s in range", ip), func(t *testing.T) {
-		allowed := HCT.User.HostAllowed(ip)
+		allowed := HCT.User.HostAllowed(ip, logger)
 		if !allowed {
 			t.Errorf("failed for host %v", ip)
 		}
 	})
 	ip = "192.168.0.12"
 	t.Run(fmt.Sprintf("CIDR ip %s in range \"pass\"", ip), func(t *testing.T) {
-		allowed := HCT.User.HostAllowed(ip)
+		allowed := HCT.User.HostAllowed(ip, logger)
 		if !allowed {
 			t.Errorf("failed for host %v", ip)
 		}
 	})
 	// example.com IP's based on nslookup example.com
-	ip = "93.184.216.34"
+	ip = "93.184.215.14"
 	t.Run(fmt.Sprintf("DNS for ip %s", ip), func(t *testing.T) {
-		allowed := HCT.User.HostAllowed(ip)
+		allowed := HCT.User.HostAllowed(ip, logger)
 		if !allowed {
 			t.Errorf("failed for host %v", ip)
 		}
@@ -109,21 +109,21 @@ func Test_Auth(t *testing.T) {
 	// Fail tests
 	ip = "127.0.0.1"
 	t.Run(fmt.Sprintf("normal ip not in list %s \"fail\"", ip), func(t *testing.T) {
-		allowed := HCT.User.HostAllowed(ip)
+		allowed := HCT.User.HostAllowed(ip, logger)
 		if allowed {
 			t.Errorf("failed for host %v", ip)
 		}
 	})
 	ip = "172.16.0.1"
 	t.Run(fmt.Sprintf("normal ip not in list %s \"fail\"", ip), func(t *testing.T) {
-		allowed := HCT.User.HostAllowed(ip)
+		allowed := HCT.User.HostAllowed(ip, logger)
 		if allowed {
 			t.Errorf("failed for host %v", ip)
 		}
 	})
 	ip = "hello.world"
 	t.Run(fmt.Sprintf("normal ip %s \"fail\"", ip), func(t *testing.T) {
-		allowed := HCT.User.HostAllowed(ip)
+		allowed := HCT.User.HostAllowed(ip, logger)
 		if allowed {
 			t.Errorf("failed for host %v", ip)
 		}

@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"log/slog"
 	"net/http"
 	"os"
 	"reflect"
@@ -34,41 +33,30 @@ var decoder = schema.NewDecoder()
 func (App *Application) RootControllerV1(w http.ResponseWriter, r *http.Request) {
 	requestcount := App.Count.GetCount()
 	request := GetRequestParameters(r, requestcount)
-	logger.Debug("Start",
-		"function", "RootControllerV1", "struct", "Application",
-		"id", request.ID, "address", request.RequestIP, "method", request.Method,
-		"path", request.orgRequest.URL.EscapedPath(), "namespace", request.Namespace)
+	debugLogger := request.Logger.Ext.With("function", "RootControllerV1")
+	debugLogger.Debug("WebAppStart")
 	for _, api := range App.APIEndpoints {
 		if api.APIPrefix() == request.Api {
-
-			logger.Debug("Select Api",
-				"function", "RootControllerV1", "struct", "Application",
-				"id", request.ID, "prefix", api.APIPrefix(),
-				"api", request.Api)
-
+			debugLogger.Debug("Select Api", "prefix", api.APIPrefix())
 			if App.Auth.Authentication(request) && request.Authentication.User.Autorization(
 				request,
 				api.Permissions(request)) {
-				logger.Debug("Auth Successful",
-					"function", "RootControllerV1", "struct", "Application",
-					"id", request.ID, "prefix", api.APIPrefix(),
-					"api", request.Api, "username", request.Basic.Username, "namespace", request.Namespace)
+				debugLogger.Debug("Auth Successful", "prefix", api.APIPrefix(), "api", request.Api)
 				api.ApiController(w, request)
 				return
 			} else {
-				logger.Debug("Auth Failed",
-					"function", "RootControllerV1", "struct", "Application",
-					"id", request.ID, "prefix", api.APIPrefix(),
-					"api", request.Api, "username", request.Basic.Username, "namespace", request.Namespace)
-				App.Auth.ServeAuthFailed(w, request)
+				debugLogger.Debug("Auth Failed", "prefix", api.APIPrefix(), "api", request.Api)
+				App.WriteStatusMessage(http.StatusUnauthorized, w, request)
 			}
 
 		}
 	}
 }
 
-func (App *Application) decodeAny(r *http.Request, data any) error {
+func (App *Application) decodeAny(request *RequestParameters, data any) error {
+	r := request.orgRequest
 	contentType := r.Header.Get("Content-Type")
+	debugLogger := request.Logger.Ext.With("function", "decodeAny", "contentType", contentType)
 	if contentType == "" && r.ContentLength == 0 {
 		return nil
 	}
@@ -79,30 +67,32 @@ func (App *Application) decodeAny(r *http.Request, data any) error {
 		if r.Body != nil {
 			bodyBytes, err := io.ReadAll(r.Body)
 			if err != nil {
-				logger.Debug("ReadAll error", "function", "decodeAny", "struct", "Application", "contentType", contentType, "error", err)
+				debugLogger.Debug("ReadAll error", "error", err)
 				return err
 			}
 			defer r.Body.Close()
 			body := string(bodyBytes)
 			if strings.Contains(body, "type=") || strings.Contains(body, "value=") {
-				return App.decodeXWWWForm(r, data)
+				return App.decodeXWWWForm(request, data)
 			}
 			construct := data.(*rest.ObjectV1)
 			construct.Value = body
 			return nil
 		}
 	case "application/json":
-		return App.decodeJson(r, data)
+		return App.decodeJson(request, data)
 	}
-	logger.Debug("Unknown contenttype", "function", "decodeAny", "struct", "Application", "contentType", contentType)
+	debugLogger.Debug("Unknown contenttype")
 	return fmt.Errorf("unknown Content-Type: %v", contentType)
 }
 
-func (App *Application) decodeJson(r *http.Request, data any) error {
+func (App *Application) decodeJson(request *RequestParameters, data any) error {
+	r := request.orgRequest
+	debugLogger := request.Logger.Ext.With("function", "decodeJson")
 	var err error
 	defer func() {
 		if rec := recover(); rec != nil {
-			logger.Debug("json Decode Panic error", "function", "decodeXWWWForm", "struct", "Application", "error", rec)
+			debugLogger.Debug("json Decode Panic error", "error", rec)
 			err = fmt.Errorf("%+v", rec)
 		}
 	}()
@@ -110,16 +100,18 @@ func (App *Application) decodeJson(r *http.Request, data any) error {
 	return err
 }
 
-func (App *Application) decodeXWWWForm(r *http.Request, data any) error {
+func (App *Application) decodeXWWWForm(request *RequestParameters, data any) error {
+	r := request.orgRequest
+	debugLogger := request.Logger.Ext.With("function", "decodeXWWWForm")
 	err := r.ParseForm()
 	if err != nil {
-		logger.Debug("ParseForm error", "function", "decodeXWWWForm", "struct", "Application", "error", err)
+		debugLogger.Debug("ParseForm error", "error", err)
 		return err
 	}
-	logger.Debug(fmt.Sprintf("ParseForm PostForm: %+v", r.PostForm), "function", "decodeXWWWForm", "struct", "Application")
+	debugLogger.Debug(fmt.Sprintf("ParseForm PostForm: %+v", r.PostForm))
 	err = decoder.Decode(data, r.PostForm)
 	if err != nil {
-		logger.Debug("Decode error", "function", "decodeXWWWForm", "struct", "Application", "error", err)
+		debugLogger.Debug("Decode error", "error", err)
 		return err
 	}
 	return nil
@@ -132,25 +124,15 @@ func (App *Application) PrometheusStatusTest(status int) string {
 func (App *Application) WriteStatusMessage(status int, w http.ResponseWriter, request *RequestParameters) {
 	statusText := http.StatusText(status)
 	statusTextFormated := fmt.Sprintf("%v %v", status, statusText)
-	logger.Debug(statusTextFormated,
-		"function", "WriteStatusMessage", "struct", "Auth",
-		"id", request.ID, "address", request.RequestIP,
-		"user", request.GetUserName(), "method", request.Method,
-		"path", request.orgRequest.URL.EscapedPath(), "namespace", request.Namespace, "status", status, "status-text", statusText)
+	request.Logger.Ext.Debug(statusTextFormated,
+		"function", "WriteStatusMessage", "status", status, "status-text", statusText)
+	request.Logger.Log.Info("Handeled Reqeust", "status", status, "status-text", statusText)
 	w.Header().Set("Content-Type", "text/html")
+	if status == http.StatusUnauthorized {
+		w.Header().Set("WWW-Authenticate", `Basic realm="restricted", charset="UTF-8"`)
+	}
 	w.WriteHeader(status)
 	w.Write([]byte(statusTextFormated))
-}
-
-func (App *Application) HTTPErrorHandler(logger *slog.Logger, err error, w http.ResponseWriter, request *RequestParameters) {
-	status := http.StatusInternalServerError
-	logger.Debug("HTTP Error", "Error", err)
-	if _, ok := err.(*ErrNotFound); ok {
-		status = http.StatusNotFound
-
-	}
-	keys.WithLabelValues(request.Key, request.Namespace, request.Method, App.PrometheusStatusTest(status)).Inc()
-	App.WriteStatusMessage(status, w, request)
 }
 
 func GetFunctionName(i interface{}) string {

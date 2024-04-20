@@ -27,23 +27,18 @@ func (Api *APIv1) APIPrefix() string {
 }
 
 func (api *APIv1) ApiController(w http.ResponseWriter, request *RequestParameters) {
+	debugLogger := request.Logger.Ext.With("function", "ApiController", "struct", "APIv1")
 	if request.Method == "UPDATE" || request.Method == "PATCH" || request.Method == "POST" || request.Method == "PUT" {
 		data := rest.ObjectV1{}
-		err := App.decodeAny(request.orgRequest, &data)
+		err := App.decodeAny(request, &data)
 		if err != nil {
-			logger.Info("Unable to decodeAny",
-				"function", "ApiController", "struct", "APIv1",
-				"id", request.ID, "error", err)
+			request.Logger.Log.Error("Unable to decode data", "error", err, "uuid", "imAqDGlP")
 		}
 		request.Attachment = &data
 	}
-	logger.Debug("ApiController",
-		"function", "ApiController", "struct", "APIv1",
-		"id", request.ID, "address", request.RequestIP,
-		"user", request.GetUserName(), "method", request.Method,
-		"namespace", request.Namespace, "key", request.Key,
-		"attachment", request.Attachment)
-	switch api.GetRequestType(request) {
+	requestType := api.GetRequestType(request)
+	debugLogger.Debug("ApiController", "attachment", request.Attachment, "requestType", requestType, "uuid", "QGf11eGa")
+	switch requestType {
 	case FullListKeys:
 		api.fullListKeys(w, request)
 	case List:
@@ -55,12 +50,7 @@ func (api *APIv1) ApiController(w http.ResponseWriter, request *RequestParameter
 	case Namespace:
 		api.namespace(w, request)
 	default:
-		logger.Error("Handler Not found",
-			"function", "ApiController", "struct", "APIv1",
-			"id", request.ID, "address", request.RequestIP,
-			"user", request.GetUserName(), "method", request.Method,
-			"path", request.orgRequest.URL.EscapedPath(), "namespace", request.Namespace, "key", request.Key, "status", 404)
-		http.NotFoundHandler().ServeHTTP(w, request.orgRequest)
+		App.WriteStatusMessage(http.StatusNotFound, w, request)
 	}
 }
 
@@ -92,18 +82,13 @@ func (api *APIv1) GetRequestType(request *RequestParameters) APIv1Type {
 }
 
 func (api *APIv1) fullListKeys(w http.ResponseWriter, request *RequestParameters) {
+	debugLogger := request.Logger.Ext.With("function", "fullListKeys")
 	status := http.StatusOK
-	logger.Info("Full List Keys Request",
-		"function", "list", "struct", "APIv1",
-		"id", request.ID, "address", request.RequestIP,
-		"user", request.GetUserName(), "method", request.Method,
-		"path", request.orgRequest.URL.EscapedPath(), "status", 200)
+	debugLogger.Debug("Full List Keys Request")
 	content, err := App.DB.Keys(request.Namespace)
 	if err != nil {
 		status = http.StatusInternalServerError
-		logger.Debug("Error listing keys from db",
-			"function", "fullListKeys", "struct", "APIv1",
-			"id", request.ID, "namespace", request.Namespace, "Error", err)
+		debugLogger.Debug("Error listing keys from db", "Error", err)
 		keys.WithLabelValues(request.Key, request.Namespace, request.Method, App.PrometheusStatusTest(status)).Inc()
 		App.WriteStatusMessage(status, w, request)
 		return
@@ -115,31 +100,25 @@ func (api *APIv1) fullListKeys(w http.ResponseWriter, request *RequestParameters
 			fullList = append(fullList, rest.KVPairV2{Key: key, Namespace: request.Namespace, Value: value})
 		} else {
 			status = http.StatusInternalServerError
-			logger.Debug("Error reading key from db",
-				"function", "fullListKeys", "struct", "APIv1",
-				"id", request.ID, "namespace", request.Namespace, "key", key, "Error", err)
+			debugLogger.Debug("Error reading key from db", "Error", err)
 			keys.WithLabelValues(request.Key, request.Namespace, request.Method, App.PrometheusStatusTest(status)).Inc()
 			App.WriteStatusMessage(status, w, request)
 			return
 		}
 	}
+	request.Logger.Log.Info("Handeled Reqeust", "status", status, "status-text", http.StatusText(status))
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(fullList)
 }
 
 func (api *APIv1) fullListNamespaces(w http.ResponseWriter, request *RequestParameters) {
+	debugLogger := request.Logger.Ext.With("function", "fullListNamespaces")
 	status := http.StatusOK
-	logger.Info("Full List Namespaces Request",
-		"function", "list", "struct", "APIv1",
-		"id", request.ID, "address", request.RequestIP,
-		"user", request.GetUserName(), "method", request.Method,
-		"path", request.orgRequest.URL.EscapedPath(), "status", 200)
+	debugLogger.Debug("Full List Namespaces Request")
 	content, err := App.DB.Keys("")
 	if err != nil {
 		status = http.StatusInternalServerError
-		logger.Debug("Error listing namespaces from db",
-			"function", "fullListNamespaces", "struct", "APIv1",
-			"id", request.ID, "namespace", request.Namespace, "Error", err)
+		debugLogger.Debug("Error listing namespaces from db", "Error", err)
 		keys.WithLabelValues(request.Key, request.Namespace, request.Method, App.PrometheusStatusTest(status)).Inc()
 		App.WriteStatusMessage(status, w, request)
 		return
@@ -153,9 +132,7 @@ func (api *APIv1) fullListNamespaces(w http.ResponseWriter, request *RequestPara
 		keyslist, err := App.DB.Keys(namespace)
 		if err != nil {
 			status = http.StatusInternalServerError
-			logger.Debug("Error listing keys from db",
-				"function", "fullListNamespaces", "struct", "APIv1",
-				"id", request.ID, "namespace", request.Namespace, "Error", err)
+			debugLogger.Debug("Error listing keys from db", "Error", err)
 			keys.WithLabelValues(request.Key, request.Namespace, request.Method, App.PrometheusStatusTest(status)).Inc()
 			App.WriteStatusMessage(status, w, request)
 			return
@@ -165,22 +142,18 @@ func (api *APIv1) fullListNamespaces(w http.ResponseWriter, request *RequestPara
 		fullList = append(fullList, rest.NamespaceV2{Name: namespace, Size: len(keyslist), Access: access})
 	}
 	request.Namespace = requestOrgNamespace
-	logger.Info("Full List Namespaces", "reply", fullList)
+	debugLogger.Debug("Full List Namespaces", "reply", fullList)
+	request.Logger.Log.Info("Handeled Reqeust", "status", status, "status-text", http.StatusText(status))
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(fullList)
 }
 
 func (api *APIv1) list(w http.ResponseWriter, request *RequestParameters) {
-	logger.Info("List Request",
-		"function", "list", "struct", "APIv1",
-		"id", request.ID, "address", request.RequestIP,
-		"user", request.GetUserName(), "method", request.Method,
-		"path", request.orgRequest.URL.EscapedPath(), "namespace", request.Namespace, "status", 200)
+	status := http.StatusOK
+	debugLogger := request.Logger.Ext.With("function", "list")
 	content, err := App.DB.Keys(request.Namespace)
 	if err != nil {
-		logger.Debug("Error listing from db",
-			"function", "list", "struct", "APIv1",
-			"id", request.ID, "namespace", request.Namespace, "Error", err)
+		debugLogger.Debug("Error listing from db", "Error", err)
 		status := http.StatusInternalServerError
 		if _, ok := err.(*ErrNotFound); ok {
 			status = http.StatusNotFound
@@ -189,25 +162,23 @@ func (api *APIv1) list(w http.ResponseWriter, request *RequestParameters) {
 		App.WriteStatusMessage(http.StatusInternalServerError, w, request)
 		return
 	}
+	debugLogger.Debug("List", "reply", content)
+	request.Logger.Log.Info("Handeled Reqeust", "status", status, "status-text", http.StatusText(status))
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(content)
 }
 
 func (api *APIv1) key(w http.ResponseWriter, request *RequestParameters) {
+	debugLogger := request.Logger.Ext.With("function", "key")
 	status := http.StatusOK
-	logger.Debug("key Request - Start",
-		"function", "key", "struct", "APIv1",
-		"id", request.ID, "address", request.RequestIP,
-		"user", request.GetUserName(), "method", request.Method,
-		"path", request.orgRequest.URL.EscapedPath(), "namespace", request.Namespace)
+	debugLogger.Debug("key Request - Start")
 	switch request.Method {
 	case "GET":
 		value, err := App.DB.Get(request.Namespace, request.Key)
 		if err != nil {
 			status = http.StatusInternalServerError
-			logger.Debug("Error getting key from db",
-				"function", "key", "struct", "APIv1",
-				"id", request.ID, "namespace", request.Namespace, "key", request.Key, "Error", err)
+			debugLogger.Debug("Error getting key from db", "Error", err)
+
 			if _, ok := err.(*ErrNotFound); ok {
 				status = http.StatusNotFound
 			}
@@ -215,18 +186,10 @@ func (api *APIv1) key(w http.ResponseWriter, request *RequestParameters) {
 			App.WriteStatusMessage(status, w, request)
 			return
 		}
-		logger.Debug("key Request - DB.Get",
-			"function", "key", "struct", "APIv1",
-			"id", request.ID, "namespace", request.Namespace,
-			"key", request.Key, "value", value)
+		debugLogger.Debug("key Request - DB.Get", "value", value)
 		reply := rest.KVPairV2{Key: request.Key, Namespace: request.Namespace, Value: value}
 		keys.WithLabelValues(request.Key, request.Namespace, request.Method, http.StatusText(status)).Inc()
-
-		logger.Info("key Request",
-			"function", "key", "struct", "APIv1",
-			"id", request.ID, "address", request.RequestIP,
-			"user", request.GetUserName(), "method", request.Method,
-			"path", request.orgRequest.URL.EscapedPath(), "namespace", request.Namespace, "key", request.Key, "status", status)
+		request.Logger.Log.Info("Handeled Reqeust", "status", status, "status-text", http.StatusText(status))
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(reply)
 		return
@@ -235,76 +198,83 @@ func (api *APIv1) key(w http.ResponseWriter, request *RequestParameters) {
 			keys.WithLabelValues(request.Key, request.Namespace, "POST", "BadRequest").Inc()
 			App.WriteStatusMessage(http.StatusBadRequest, w, request)
 		}
+		debugLogger.Debug("POST Content", "value", request.Attachment.Value, "type", request.Attachment.Type)
 		err := App.DB.Set(request.Namespace, request.Key, request.Attachment.Value)
 		if err != nil {
-			logger.Debug("Error setting key in db",
-				"function", "key", "struct", "APIv1",
-				"id", request.ID, "namespace", request.Namespace, "key", request.Key, "Error", err)
+			debugLogger.Debug("Error setting key in db", "Error", err)
 			status := http.StatusInternalServerError
 			keys.WithLabelValues(request.Key, request.Namespace, request.Method, App.PrometheusStatusTest(status)).Inc()
 			App.WriteStatusMessage(status, w, request)
 			return
 		}
-		value, err := App.DB.Get(request.Namespace, request.Key)
-		if err != nil {
-			logger.Debug("Error getting key from db",
-				"function", "key", "struct", "APIv1",
-				"id", request.ID, "namespace", request.Namespace, "key", request.Key, "Error", err)
-			status := http.StatusInternalServerError
-			if _, ok := err.(*ErrNotFound); ok {
-				status = http.StatusNotFound
+		// Should not be nessesary to test that object is created....
+		/*
+			value, err := App.DB.Get(request.Namespace, request.Key)
+			if err != nil {
+				debugLogger.Debug("Error getting key from db", "Error", err)
+				status := http.StatusInternalServerError
+				if _, ok := err.(*ErrNotFound); ok {
+					status = http.StatusNotFound
+				}
+				keys.WithLabelValues(request.Key, request.Namespace, request.Method, App.PrometheusStatusTest(status)).Inc()
+				App.WriteStatusMessage(status, w, request)
+				return
 			}
-			keys.WithLabelValues(request.Key, request.Namespace, request.Method, App.PrometheusStatusTest(status)).Inc()
-			App.WriteStatusMessage(status, w, request)
-			return
-		}
+			status = http.StatusCreated
+			debugLogger.Debug("key Request - DB.Get", "value", value)
+			keys.WithLabelValues(request.Key, request.Namespace, request.Method, http.StatusText(status)).Inc()
+			logger.Info("key Request",
+				"function", "key", "struct", "APIv1",
+				"id", request.ID, "address", request.RequestIP,
+				"user", request.GetUserName(), "method", request.Method,
+				"path", request.orgRequest.URL.EscapedPath(), "namespace", request.Namespace, "key", request.Key, "status", status)
+		*/
 		status = http.StatusCreated
-		logger.Debug("key Request - DB.Get",
-			"function", "key", "struct", "APIv1",
-			"id", request.ID, "namespace", request.Namespace,
-			"key", request.Key, "value", value)
-		keys.WithLabelValues(request.Key, request.Namespace, request.Method, http.StatusText(status)).Inc()
-		logger.Info("key Request",
-			"function", "key", "struct", "APIv1",
-			"id", request.ID, "address", request.RequestIP,
-			"user", request.GetUserName(), "method", request.Method,
-			"path", request.orgRequest.URL.EscapedPath(), "namespace", request.Namespace, "key", request.Key, "status", status)
 		App.WriteStatusMessage(status, w, request)
 		return
 
 	case "PUT":
-		App.DB.Set(request.Namespace, request.Key, request.Attachment.Value)
-		value, err := App.DB.Get(request.Namespace, request.Key)
+		debugLogger.Debug("PUT Content", "value", request.Attachment.Value, "type", request.Attachment.Type)
+		err := App.DB.Set(request.Namespace, request.Key, request.Attachment.Value)
 		if err != nil {
-			logger.Debug("Error getting key from db",
-				"function", "key", "struct", "APIv1",
-				"id", request.ID, "namespace", request.Namespace, "key", request.Key, "Error", err)
+			debugLogger.Debug("Error setting key in db", "Error", err)
 			status := http.StatusInternalServerError
-			if _, ok := err.(*ErrNotFound); ok {
-				status = http.StatusNotFound
-			}
 			keys.WithLabelValues(request.Key, request.Namespace, request.Method, App.PrometheusStatusTest(status)).Inc()
 			App.WriteStatusMessage(status, w, request)
 			return
 		}
+		// Should not be nessesary to test that object is created....
+		/*
+			value, err := App.DB.Get(request.Namespace, request.Key)
+			if err != nil {
+				logger.Debug("Error getting key from db",
+					"function", "key", "struct", "APIv1",
+					"id", request.ID, "namespace", request.Namespace, "key", request.Key, "Error", err)
+				status := http.StatusInternalServerError
+				if _, ok := err.(*ErrNotFound); ok {
+					status = http.StatusNotFound
+				}
+				keys.WithLabelValues(request.Key, request.Namespace, request.Method, App.PrometheusStatusTest(status)).Inc()
+				App.WriteStatusMessage(status, w, request)
+				return
+			}
+			status = http.StatusCreated
+			logger.Debug("key Request - DB.Get",
+				"function", "key", "struct", "APIv1",
+				"id", request.ID, "namespace", request.Namespace,
+				"key", request.Key, "value", value)
+			keys.WithLabelValues(request.Key, request.Namespace, request.Method, http.StatusText(status)).Inc()
+			logger.Info("key Request",
+				"function", "key", "struct", "APIv1",
+				"id", request.ID, "address", request.RequestIP,
+				"user", request.GetUserName(), "method", request.Method,
+				"path", request.orgRequest.URL.EscapedPath(), "namespace", request.Namespace, "key", request.Key, "status", status)
+		*/
 		status = http.StatusCreated
-		logger.Debug("key Request - DB.Get",
-			"function", "key", "struct", "APIv1",
-			"id", request.ID, "namespace", request.Namespace,
-			"key", request.Key, "value", value)
-		keys.WithLabelValues(request.Key, request.Namespace, request.Method, http.StatusText(status)).Inc()
-		logger.Info("key Request",
-			"function", "key", "struct", "APIv1",
-			"id", request.ID, "address", request.RequestIP,
-			"user", request.GetUserName(), "method", request.Method,
-			"path", request.orgRequest.URL.EscapedPath(), "namespace", request.Namespace, "key", request.Key, "status", status)
 		App.WriteStatusMessage(status, w, request)
 		return
 	case "UPDATE", "PATCH":
-		logger.Debug("PUT Request extras",
-			"function", "key", "struct", "APIv1",
-			"id", request.ID, "namespace", request.Namespace,
-			"key", request.Key, "metod", request.Method,
+		debugLogger.Debug("PUT Content",
 			"update.type", request.Attachment.Type,
 			"update.value", request.Attachment.Value)
 		newKey := request.Key
@@ -313,19 +283,14 @@ func (api *APIv1) key(w http.ResponseWriter, request *RequestParameters) {
 		}
 		newData := rest.KVPairV2{Key: newKey, Namespace: request.Namespace, Value: AuthGenerateRandomString(32)}
 
-		logger.Debug("UPDATE random",
-			"function", "key", "struct", "APIv1",
-			"id", request.ID, "namespace", request.Namespace,
-			"key", request.Key, "metod", request.Method,
+		debugLogger.Debug("UPDATE random",
 			"newData.key", newData.Key, "newData.value", newData.Value)
 		_, err := App.DB.Get(request.Namespace, request.Key)
 		exists := err != nil
 		if !exists {
 			if !errors.Is(err, &ErrNotFound{}) {
 				status = http.StatusInternalServerError
-				logger.Debug("Error getting key from db",
-					"function", "key", "struct", "APIv1",
-					"id", request.ID, "namespace", request.Namespace, "key", request.Key, "Error", err)
+				debugLogger.Debug("Error setting key in db", "Error", err)
 				keys.WithLabelValues(request.Key, request.Namespace, request.Method, App.PrometheusStatusTest(status)).Inc()
 				App.WriteStatusMessage(status, w, request)
 				return
@@ -334,22 +299,14 @@ func (api *APIv1) key(w http.ResponseWriter, request *RequestParameters) {
 		if request.Attachment.Type == rest.TypeRoll && exists {
 			err := App.DB.Set(newData.Namespace, newData.Key, newData.Value)
 			if err != nil {
-				logger.Debug("Error setting key in db",
-					"function", "key", "struct", "APIv1",
-					"id", request.ID, "namespace", request.Namespace, "key", request.Key, "Error", err)
+				debugLogger.Debug("Error setting key in db", "Error", err)
 				status := http.StatusInternalServerError
 				keys.WithLabelValues(request.Key, request.Namespace, request.Method, App.PrometheusStatusTest(status)).Inc()
 				App.WriteStatusMessage(status, w, request)
 				return
 			}
-			keys.WithLabelValues(request.Namespace, request.Key, "ROLL", "OK").Inc()
-
-			logger.Info("key Request",
-				"function", "key", "struct", "APIv1",
-				"id", request.ID, "address", request.RequestIP,
-				"user", request.GetUserName(), "method", request.Method,
-				"path", request.orgRequest.URL.EscapedPath(), "namespace", request.Namespace,
-				"key", request.Key, "type", request.Attachment.Type, "status", status)
+			keys.WithLabelValues(request.Key, request.Namespace, request.Method, http.StatusText(status)).Inc()
+			request.Logger.Log.Info("Handeled Reqeust", "status", status, "status-text", http.StatusText(status))
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(newData)
 			return
@@ -357,21 +314,14 @@ func (api *APIv1) key(w http.ResponseWriter, request *RequestParameters) {
 		if request.Attachment.Type == rest.TypeGenerate && !exists {
 			err := App.DB.Set(newData.Namespace, newData.Key, newData.Value)
 			if err != nil {
-				logger.Debug("Error setting key in db",
-					"function", "key", "struct", "APIv1",
-					"id", request.ID, "namespace", request.Namespace, "key", request.Key, "Error", err)
+				debugLogger.Debug("Error setting key in db", "Error", err)
 				status := http.StatusInternalServerError
 				keys.WithLabelValues(request.Key, request.Namespace, request.Method, App.PrometheusStatusTest(status)).Inc()
 				App.WriteStatusMessage(status, w, request)
 				return
 			}
-			keys.WithLabelValues(request.Namespace, request.Key, "GENERATE", "OK").Inc()
-			logger.Info("key Request",
-				"function", "key", "struct", "APIv1",
-				"id", request.ID, "address", request.RequestIP,
-				"user", request.GetUserName(), "method", request.Method,
-				"path", request.orgRequest.URL.EscapedPath(), "namespace", request.Namespace,
-				"key", request.Key, "type", request.Attachment.Type, "status", status)
+			keys.WithLabelValues(request.Key, request.Namespace, request.Method, http.StatusText(status)).Inc()
+			request.Logger.Log.Info("Handeled Reqeust", "status", status, "status-text", http.StatusText(status))
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(newData)
 			return
@@ -383,105 +333,70 @@ func (api *APIv1) key(w http.ResponseWriter, request *RequestParameters) {
 		err := App.DB.DeleteKey(request.Namespace, request.Key)
 		if err != nil {
 			status := http.StatusInternalServerError
-			logger.Debug("Error deleting key in db",
-				"function", "key", "struct", "APIv1",
-				"id", request.ID, "namespace", request.Namespace, "key", request.Key, "Error", err)
+			debugLogger.Debug("Error deleting key in db", "Error", err)
 			keys.WithLabelValues(request.Key, request.Namespace, request.Method, App.PrometheusStatusTest(status)).Inc()
 			App.WriteStatusMessage(status, w, request)
 			return
 		}
-		keys.WithLabelValues(request.Key, request.Namespace, request.Method, http.StatusText(status)).Inc()
-		logger.Info("key Request",
-			"function", "key", "struct", "APIv1",
-			"id", request.ID, "address", request.RequestIP,
-			"user", request.GetUserName(), "method", request.Method,
-			"path", request.orgRequest.URL.EscapedPath(), "namespace", request.Namespace, "key", request.Key, "status", status)
+		keys.WithLabelValues(request.Key, request.Namespace, request.Method, App.PrometheusStatusTest(status)).Inc()
 		App.WriteStatusMessage(status, w, request)
 		return
 	default:
 		status = http.StatusNotFound
-		logger.Info("key Request",
-			"function", "key", "struct", "APIv1",
-			"id", request.ID, "address", request.RequestIP,
-			"user", request.GetUserName(), "method", request.Method,
-			"path", request.orgRequest.URL.EscapedPath(), "namespace", request.Namespace, "key", request.Key, "status", status)
-		keys.WithLabelValues(request.Key, request.Namespace, request.Method, http.StatusText(status)).Inc()
+		keys.WithLabelValues(request.Key, request.Namespace, request.Method, App.PrometheusStatusTest(status)).Inc()
 		App.WriteStatusMessage(status, w, request)
 		return
 	}
 }
 
 func (api *APIv1) namespace(w http.ResponseWriter, request *RequestParameters) {
+	debugLogger := request.Logger.Ext.With("function", "namespace")
 	status := http.StatusOK
-	logger.Debug("namespace Request - Start",
-		"function", "namespace", "struct", "APIv1",
-		"id", request.ID, "address", request.RequestIP,
-		"user", request.GetUserName(), "method", request.Method,
-		"path", request.orgRequest.URL.EscapedPath(), "namespace", request.Namespace,
-		"attachment", request.Attachment)
+	debugLogger.Debug("namespace Request - Start", "attachment", request.Attachment)
 	switch request.Method {
 	case "POST":
 		if request.Attachment == nil {
-			keys.WithLabelValues(request.Key, request.Namespace, "POST", "BadRequest").Inc()
-			App.WriteStatusMessage(http.StatusBadRequest, w, request)
+			status = http.StatusBadRequest
+			keys.WithLabelValues(request.Key, request.Namespace, request.Method, App.PrometheusStatusTest(status)).Inc()
+			App.WriteStatusMessage(status, w, request)
 		}
 		namespace := request.Namespace
 		if namespace == "" {
 			namespace = request.Attachment.Value
 		}
 		if namespace == "" {
-			keys.WithLabelValues(request.Key, request.Namespace, "POST", "BadRequest").Inc()
-			App.WriteStatusMessage(http.StatusBadRequest, w, request)
-		}
-		error := App.DB.CreateNamespace(namespace)
-		if error != nil {
+			status = http.StatusBadRequest
 			keys.WithLabelValues(request.Key, request.Namespace, request.Method, App.PrometheusStatusTest(status)).Inc()
-			logger.Debug("Create namespace Error",
-				"function", "namespace", "struct", "APIv1",
-				"id", request.ID, "method", request.Method,
-				"path", request.orgRequest.URL.EscapedPath(), "namespace", namespace,
-				"attachment", request.Attachment, "error", error)
-			http.NotFoundHandler().ServeHTTP(w, request.orgRequest)
+			App.WriteStatusMessage(status, w, request)
+		}
+		err := App.DB.CreateNamespace(namespace)
+		if err != nil {
+			status = http.StatusInternalServerError
+			debugLogger.Debug("Error creating namespace in db", "Error", err)
+			keys.WithLabelValues(request.Key, request.Namespace, request.Method, App.PrometheusStatusTest(status)).Inc()
+			App.WriteStatusMessage(status, w, request)
 			return
 		}
 		status = http.StatusCreated
-		logger.Info("namespace Request",
-			"function", "key", "struct", "APIv1",
-			"id", request.ID, "address", request.RequestIP,
-			"user", request.GetUserName(), "method", request.Method,
-			"path", request.orgRequest.URL.EscapedPath(), "namespace", namespace, "key", request.Key, "status", status)
-		keys.WithLabelValues(request.Key, namespace, request.Method, http.StatusText(status)).Inc()
+		keys.WithLabelValues(request.Key, namespace, request.Method, App.PrometheusStatusTest(status)).Inc()
 		App.WriteStatusMessage(status, w, request)
 		return
 	case "DELETE":
-		error := App.DB.DeleteNamespace(request.Namespace)
-		if error != nil {
+		err := App.DB.DeleteNamespace(request.Namespace)
+		if err != nil {
+			status = http.StatusInternalServerError
+			debugLogger.Debug("Error creating namespace in db", "Error", err)
 			keys.WithLabelValues(request.Key, request.Namespace, request.Method, App.PrometheusStatusTest(status)).Inc()
-			logger.Debug("Create namespace Error",
-				"function", "namespace", "struct", "APIv1",
-				"id", request.ID, "method", request.Method,
-				"path", request.orgRequest.URL.EscapedPath(), "namespace", request.Namespace,
-				"attachment", request.Attachment, "error", error)
-			http.NotFoundHandler().ServeHTTP(w, request.orgRequest)
+			App.WriteStatusMessage(status, w, request)
 			return
 		}
-		status = http.StatusOK
 		keys.WithLabelValues(request.Key, request.Namespace, request.Method, App.PrometheusStatusTest(status)).Inc()
-		logger.Info("namespace Request",
-			"function", "namespace", "struct", "APIv1",
-			"id", request.ID, "address", request.RequestIP,
-			"user", request.GetUserName(), "method", request.Method,
-			"path", request.orgRequest.URL.EscapedPath(), "namespace", request.Namespace, "key", request.Key, "status", 200)
-		keys.WithLabelValues(request.Key, request.Namespace, request.Method, http.StatusText(status)).Inc()
 		App.WriteStatusMessage(status, w, request)
 		return
 	default:
-		logger.Info("namespace Request",
-			"function", "key", "struct", "APIv1",
-			"id", request.ID, "address", request.RequestIP,
-			"user", request.GetUserName(), "method", request.Method,
-			"path", request.orgRequest.URL.EscapedPath(), "namespace", request.Namespace, "key", request.Key, "status", 404)
-		http.NotFoundHandler().ServeHTTP(w, request.orgRequest)
+		status = http.StatusNotFound
+		keys.WithLabelValues(request.Key, request.Namespace, request.Method, App.PrometheusStatusTest(status)).Inc()
+		App.WriteStatusMessage(status, w, request)
 		return
 	}
 }

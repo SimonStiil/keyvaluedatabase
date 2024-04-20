@@ -58,7 +58,7 @@ func TestGETGreeting(t *testing.T) {
 		}
 	})
 	TestPassword := "testpassword"
-	UnauthorizedBody := "Unauthorized\n"
+	UnauthorizedBody := fmt.Sprintf("%v %v", http.StatusUnauthorized, http.StatusText(http.StatusUnauthorized))
 	t.Run("GET readall wrong password", func(t *testing.T) {
 		request, _ := http.NewRequest(http.MethodGet,
 			fmt.Sprintf("/%v/%v/notUsed", stub.APIPrefix(), namespace),

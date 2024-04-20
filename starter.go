@@ -32,8 +32,9 @@ var (
 		Help: "The amount of requests for a certain key",
 	}, []string{"key", "namespace", "method", "error"},
 	)
-	logger *slog.Logger
-	App    *Application
+	logger      *slog.Logger
+	debugLogger *slog.Logger
+	App         *Application
 )
 
 type ConfigType struct {
@@ -138,8 +139,10 @@ func setupLogging(Logging ConfigLogging) {
 	switch logFormat {
 	case "json":
 		logger = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: loggingLevel}))
+		debugLogger = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: loggingLevel, AddSource: true}))
 	default:
 		logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: loggingLevel}))
+		debugLogger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: loggingLevel, AddSource: true}))
 	}
 	logger.Info("Logging started with options", "format", Logging.Format, "level", Logging.Level, "function", "setupLogging")
 	slog.SetDefault(logger)
@@ -148,7 +151,8 @@ func setupLogging(Logging ConfigLogging) {
 func setupTestlogging() {
 	loggingLevel := new(slog.LevelVar)
 	loggingLevel.Set(slog.LevelDebug)
-	logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: loggingLevel}))
+	logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: loggingLevel, AddSource: true}))
+	debugLogger = logger
 }
 
 // https://medium.com/mercadolibre-tech/go-language-relational-databases-and-orms-682a5fd3bbb6
