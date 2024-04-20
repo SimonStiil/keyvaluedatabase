@@ -60,38 +60,34 @@ func (MDB *MariaDatabase) Init() {
 	if err != nil {
 		panic(err.Error())
 	}
-	MDB.createTable(MDB.GetSystemNS())
-	logger.Debug("Initialization complete", "function", "Init", "struct", "MariaDatabase")
 	MDB.Initialized = true
+	err = MDB.CreateNamespace(MDB.GetSystemNS())
+	if err != nil {
+		panic(err.Error())
+	}
+	logger.Debug("Initialization complete", "function", "Init", "struct", "MariaDatabase")
 }
 func (MDB *MariaDatabase) GetSystemNS() string {
 	return MDB.Config.SystemTableName
 }
 
-func (MDB *MariaDatabase) createTable(namespace string) {
-	result, err := MDB.Connection.Exec(fmt.Sprintf("CREATE TABLE IF NOT EXISTS `%v` ( `%v` CHAR(%v) PRIMARY KEY, `%v` VARCHAR(%v) NOT NULL) ENGINE = InnoDB; ", namespace, MDB.Config.KeyName, rest.KeyMaxLength, MDB.Config.ValueName, rest.ValueMaxLength))
-	logger.Debug("Create table if not exists", "function", "createTable", "struct", "MariaDatabase", "namespace", namespace, "result", result)
-	if err != nil {
-		logger.Error("Error creating table", "function", "createTable", "struct", "MariaDatabase", "namespace", namespace, "error", err)
-	}
-}
-
-func (MDB *MariaDatabase) Set(namespace string, key string, value interface{}) {
+func (MDB *MariaDatabase) Set(namespace string, key string, value interface{}) error {
 	if !MDB.Initialized {
 		panic("F Unable to set. db not initialized()")
 	}
-	MDB.createTable(namespace)
+	MDB.CreateNamespace(namespace)
 	statement, err := MDB.Connection.Prepare(fmt.Sprintf("INSERT INTO `%v` (`%v`, `%v`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `%v`=?", namespace, MDB.Config.KeyName, MDB.Config.ValueName, MDB.Config.ValueName))
 	if err != nil {
-		panic(err)
+		return err
 	}
 	_, err = statement.Exec(key, value, value)
 	if err != nil {
-		panic(err)
+		return err
 	}
+	return nil
 }
 
-func (MDB *MariaDatabase) Get(namespace string, key string) (string, bool) {
+func (MDB *MariaDatabase) Get(namespace string, key string) (string, error) {
 	if !MDB.Initialized {
 		panic("F Unable to get. db not initialized()")
 	}
@@ -99,21 +95,27 @@ func (MDB *MariaDatabase) Get(namespace string, key string) (string, bool) {
 
 	if err != nil {
 		logger.Error("Query failed with error", "function", "Get", "struct", "MariaDatabase", "namespace", namespace, "error", err)
+		return "", err
 	}
 	defer rows.Close()
-	kvpair := rest.KVPairV1{}
+	kvpair := rest.KVPairV2{}
 	found := false
 	for rows.Next() {
 		err = rows.Scan(&kvpair.Key, &kvpair.Value)
 		if err != nil {
 			logger.Error("Scan row failed with error", "function", "Get", "struct", "MariaDatabase", "namespace", namespace, "error", err)
+			return "", err
 		}
 		found = true
 	}
-	return kvpair.Value, found
+	if found {
+		return kvpair.Value, err
+	} else {
+		return "", &ErrNotFound{Value: key}
+	}
 }
 
-func (MDB *MariaDatabase) Keys(namespace string) []string {
+func (MDB *MariaDatabase) Keys(namespace string) ([]string, error) {
 	if !MDB.Initialized {
 		panic("F Unable to get. db not initialized()")
 	}
@@ -126,6 +128,7 @@ func (MDB *MariaDatabase) Keys(namespace string) []string {
 	}
 	if err != nil {
 		logger.Error("Query failed with error", "function", "Keys", "struct", "MariaDatabase", "namespace", namespace, "error", err)
+		return nil, err
 	}
 	defer rows.Close()
 	keys := []string{}
@@ -134,24 +137,61 @@ func (MDB *MariaDatabase) Keys(namespace string) []string {
 		err = rows.Scan(&key)
 		if err != nil {
 			logger.Error("Scan row failed with error", "function", "Keys", "struct", "MariaDatabase", "namespace", namespace, "error", err)
+			return keys, err
 		}
 		keys = append(keys, key)
 	}
-	return keys
+	return keys, nil
 }
 
-func (MDB *MariaDatabase) Delete(namespace string, key string) {
+func (MDB *MariaDatabase) DeleteKey(namespace string, key string) error {
 	if !MDB.Initialized {
 		panic("F Unable to get. db not initialized()")
 	}
 	stmt, err := MDB.Connection.Prepare(fmt.Sprintf("delete from `%v` where `%v` = ?", namespace, MDB.Config.KeyName))
 	if err != nil {
-		logger.Error("Prepare failed with error", "function", "Delete", "struct", "MariaDatabase", "namespace", namespace, "error", err)
+		logger.Error("Prepare failed with error", "function", "DeleteKey", "struct", "MariaDatabase", "namespace", namespace, "key", key, "error", err)
+		return err
 	}
 	_, err = stmt.Exec(key)
 	if err != nil {
-		logger.Error("Exec failed with error", "function", "Delete", "struct", "MariaDatabase", "namespace", namespace, "error", err)
+		logger.Error("Exec failed with error", "function", "DeleteKey", "struct", "MariaDatabase", "namespace", namespace, "key", key, "error", err)
+		return err
 	}
+	return nil
+}
+
+func (MDB *MariaDatabase) CreateNamespace(namespace string) error {
+	if !MDB.Initialized {
+		panic("F Unable to get. db not initialized()")
+	}
+	result, err := MDB.Connection.Exec(fmt.Sprintf("CREATE TABLE IF NOT EXISTS `%v` ( `%v` CHAR(%v) PRIMARY KEY, `%v` VARCHAR(%v) NOT NULL) ENGINE = InnoDB; ", namespace, MDB.Config.KeyName, rest.KeyMaxLength, MDB.Config.ValueName, rest.ValueMaxLength))
+	logger.Debug("Create table if not exists", "function", "createTable", "struct", "MariaDatabase", "namespace", namespace, "result", result)
+	if err != nil {
+		logger.Error("Error creating table", "function", "createTable", "struct", "MariaDatabase", "namespace", namespace, "error", err)
+		return err
+	}
+	return nil
+}
+
+func (MDB *MariaDatabase) DeleteNamespace(namespace string) error {
+	if !MDB.Initialized {
+		panic("F Unable to get. db not initialized()")
+	}
+	if namespace == MDB.GetSystemNS() {
+		return fmt.Errorf("Unable to delete System NS %v", namespace)
+	}
+	stmt, err := MDB.Connection.Prepare("drop table if exists ?")
+	if err != nil {
+		logger.Error("Prepare failed with error", "function", "Delete", "struct", "MariaDatabase", "namespace", namespace, "error", err)
+		return err
+	}
+	_, err = stmt.Exec(namespace)
+	if err != nil {
+		logger.Error("Exec failed with error", "function", "Delete", "struct", "MariaDatabase", "namespace", namespace, "error", err)
+		return err
+	}
+	return nil
 }
 
 func (MDB *MariaDatabase) IsInitialized() bool {

@@ -33,7 +33,8 @@ func TestApiV1(t *testing.T) {
 		App.Count = &Counter{}
 		App.Count.Init(App.DB)
 	})
-	okBody := "OK"
+	okBody := "200 OK"
+	createdBody := "201 Created"
 	testKey := "somekey"
 	testNamespace := "somenamespace"
 	testData := rest.ObjectV1{Type: rest.TypeKey, Value: "123"}
@@ -58,8 +59,8 @@ func TestApiV1(t *testing.T) {
 		if response.Code != http.StatusCreated {
 			t.Errorf(".Code got %q, want %q", response.Code, http.StatusCreated)
 		}
-		if string(b) != okBody {
-			t.Errorf(".Body got %q, want %q", string(b), okBody)
+		if string(b) != createdBody {
+			t.Errorf(".Body got %q, want %q", string(b), createdBody)
 		}
 	})
 	testKey = "somenewkey"
@@ -83,8 +84,8 @@ func TestApiV1(t *testing.T) {
 		if response.Code != http.StatusCreated {
 			t.Errorf(".Code got %v, want %v", response.Code, http.StatusCreated)
 		}
-		if string(b) != okBody {
-			t.Errorf(".Body got %q, want %q", string(b), okBody)
+		if string(b) != createdBody {
+			t.Errorf(".Body got %q, want %q", string(b), createdBody)
 		}
 	})
 	testKey = "someotherkey"
@@ -106,8 +107,8 @@ func TestApiV1(t *testing.T) {
 		if response.Code != http.StatusCreated {
 			t.Errorf(".Code got %v, want %v", response.Code, http.StatusCreated)
 		}
-		if string(b) != okBody {
-			t.Errorf(".Body got %q, want %q", string(b), okBody)
+		if string(b) != createdBody {
+			t.Errorf(".Body got %q, want %q", string(b), createdBody)
 		}
 	})
 	testKey = "somedifferentkey"
@@ -130,8 +131,8 @@ func TestApiV1(t *testing.T) {
 		if response.Code != http.StatusCreated {
 			t.Errorf(".Code got %v, want %v", response.Code, http.StatusCreated)
 		}
-		if string(b) != okBody {
-			t.Errorf(".Body got %q, want %q", string(b), okBody)
+		if string(b) != createdBody {
+			t.Errorf(".Body got %q, want %q", string(b), createdBody)
 		}
 	})
 	t.Run("List keys", func(t *testing.T) {
@@ -170,7 +171,7 @@ func TestApiV1(t *testing.T) {
 		if response.Code != http.StatusOK {
 			t.Errorf(".Code got %q, want %q", response.Code, http.StatusOK)
 		}
-		var replyPair rest.KVPairV1
+		var replyPair rest.KVPairV2
 		err := json.Unmarshal(response.Body.Bytes(), &replyPair)
 		if err != nil {
 			t.Error(err)
@@ -230,7 +231,7 @@ func TestApiV1(t *testing.T) {
 		}
 	})
 	testCreateNamespace := rest.ObjectV1{Type: rest.TypeNamespace, Value: "newNamespace"}
-	t.Run("Creae Namespace POST(json)", func(t *testing.T) {
+	t.Run("Create Namespace POST(json)", func(t *testing.T) {
 		marshalled, err := json.Marshal(testCreateNamespace)
 		if err != nil {
 			t.Fatalf("impossible to marshall teacher: %s", err)
@@ -249,8 +250,8 @@ func TestApiV1(t *testing.T) {
 		if response.Code != http.StatusCreated {
 			t.Errorf(".Code got %q, want %q", response.Code, http.StatusCreated)
 		}
-		if string(b) != okBody {
-			t.Errorf(".Body got %q, want %q", string(b), okBody)
+		if string(b) != createdBody {
+			t.Errorf(".Body got %q, want %q", string(b), createdBody)
 		}
 	})
 	t.Run("List namespaces", func(t *testing.T) {
@@ -378,51 +379,52 @@ func TestApiV1(t *testing.T) {
 		if foundSystemNS {
 			t.Errorf("list should not contain: %v", App.DB.GetSystemNS())
 		}
-		t.Run("Delete key", func(t *testing.T) {
-			request, _ := http.NewRequest(http.MethodDelete,
-				fmt.Sprintf("%v/%v/%v", URLPrefix, testNamespace, testKey),
-				nil)
-			request.Header.Set("Content-Type", "application/json")
-			response := httptest.NewRecorder()
-			requestParameters := GetRequestParameters(request, requestsCount)
-			requestsCount += 1
-			api.ApiController(response, requestParameters)
-			b, err := io.ReadAll(response.Body)
+	})
+
+	t.Run("Delete key", func(t *testing.T) {
+		request, _ := http.NewRequest(http.MethodDelete,
+			fmt.Sprintf("%v/%v/%v", URLPrefix, testNamespace, testKey),
+			nil)
+		request.Header.Set("Content-Type", "application/json")
+		response := httptest.NewRecorder()
+		requestParameters := GetRequestParameters(request, requestsCount)
+		requestsCount += 1
+		api.ApiController(response, requestParameters)
+		b, err := io.ReadAll(response.Body)
+		if err != nil {
+			t.Errorf("Error Reading body %v", err)
+		}
+		//t.Logf("Body: %v, Status: %v", string(b), response.Code)
+		if response.Code != http.StatusOK {
+			t.Errorf(".Code got %q, want %q", response.Code, http.StatusOK)
+		}
+		if string(b) != okBody {
+			t.Errorf(".Body got %q, want %q", string(b), okBody)
+		}
+	})
+	t.Run("Get - Post delete test", func(t *testing.T) {
+		request, _ := http.NewRequest(http.MethodGet,
+			fmt.Sprintf("%v/%v/%v", URLPrefix, testNamespace, testKey),
+			nil)
+		response := httptest.NewRecorder()
+		requestParameters := GetRequestParameters(request, requestsCount)
+		requestsCount += 1
+		api.ApiController(response, requestParameters)
+		if response.Code != http.StatusNotFound {
+			t.Errorf(".Code got %q, want %q", response.Code, http.StatusNotFound)
+			var replyPair rest.KVPairV2
+			err := json.Unmarshal(response.Body.Bytes(), &replyPair)
 			if err != nil {
-				t.Errorf("Error Reading body %v", err)
-			}
-			//t.Logf("Body: %v, Status: %v", string(b), response.Code)
-			if response.Code != http.StatusOK {
-				t.Errorf(".Code got %q, want %q", response.Code, http.StatusOK)
-			}
-			if string(b) != okBody {
-				t.Errorf(".Body got %q, want %q", string(b), okBody)
-			}
-		})
-		t.Run("Get - Post delete test", func(t *testing.T) {
-			request, _ := http.NewRequest(http.MethodGet,
-				fmt.Sprintf("%v/%v/%v", URLPrefix, testNamespace, testKey),
-				nil)
-			response := httptest.NewRecorder()
-			requestParameters := GetRequestParameters(request, requestsCount)
-			requestsCount += 1
-			api.ApiController(response, requestParameters)
-			if response.Code != http.StatusNotFound {
-				t.Errorf(".Code got %q, want %q", response.Code, http.StatusNotFound)
-				var replyPair rest.KVPairV1
-				err := json.Unmarshal(response.Body.Bytes(), &replyPair)
-				if err != nil {
-					t.Error(err)
-				}
-
-				if replyPair.Key != testKey {
-					t.Errorf(".Key got %q, want %q", replyPair.Key, testKey)
-				}
-				if replyPair.Value != testData.Value {
-					t.Errorf(".Value got %q, want %q", replyPair.Value, testData.Value)
-				}
+				t.Error(err)
 			}
 
-		})
+			if replyPair.Key != testKey {
+				t.Errorf(".Key got %q, want %q", replyPair.Key, testKey)
+			}
+			if replyPair.Value != testData.Value {
+				t.Errorf(".Value got %q, want %q", replyPair.Value, testData.Value)
+			}
+		}
+
 	})
 }

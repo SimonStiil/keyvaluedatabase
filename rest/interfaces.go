@@ -16,16 +16,16 @@ type ObjectV1 struct {
 	Type  ObjectType `json:"type"`
 	Value string     `json:"value"`
 }
-type KVPairListV1 []KVPairV1
+type KVPairListV1 []KVPairV2
 
-type KVPairV1 struct {
+type KVPairV2 struct {
 	Key       string `json:"key"`
 	Namespace string `json:"namespace"`
 	Value     string `json:"value"`
 }
-type NamespaceListV1 []NamespaceListObjV1
+type NamespaceListV1 []NamespaceV2
 
-type NamespaceListObjV1 struct {
+type NamespaceV2 struct {
 	Name   string `json:"name"`
 	Access bool   `json:"access"`
 	Size   int    `json:"size"`

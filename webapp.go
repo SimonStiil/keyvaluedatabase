@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"reflect"
@@ -124,15 +125,32 @@ func (App *Application) decodeXWWWForm(r *http.Request, data any) error {
 	return nil
 }
 
-func (App *Application) BadRequestHandler(w http.ResponseWriter, request *RequestParameters) {
-	logger.Info("Auth Failed",
-		"function", "ServeAuthFailed", "struct", "Auth",
+func (App *Application) PrometheusStatusTest(status int) string {
+	return strings.ReplaceAll(http.StatusText(status), " ", "")
+}
+
+func (App *Application) WriteStatusMessage(status int, w http.ResponseWriter, request *RequestParameters) {
+	statusText := http.StatusText(status)
+	statusTextFormated := fmt.Sprintf("%v %v", status, statusText)
+	logger.Debug(statusTextFormated,
+		"function", "WriteStatusMessage", "struct", "Auth",
 		"id", request.ID, "address", request.RequestIP,
 		"user", request.GetUserName(), "method", request.Method,
-		"path", request.orgRequest.URL.EscapedPath(), "namespace", request.Namespace, "status", 400)
+		"path", request.orgRequest.URL.EscapedPath(), "namespace", request.Namespace, "status", status, "status-text", statusText)
 	w.Header().Set("Content-Type", "text/html")
-	w.WriteHeader(http.StatusBadRequest)
-	w.Write([]byte("400 Bad Request"))
+	w.WriteHeader(status)
+	w.Write([]byte(statusTextFormated))
+}
+
+func (App *Application) HTTPErrorHandler(logger *slog.Logger, err error, w http.ResponseWriter, request *RequestParameters) {
+	status := http.StatusInternalServerError
+	logger.Debug("HTTP Error", "Error", err)
+	if _, ok := err.(*ErrNotFound); ok {
+		status = http.StatusNotFound
+
+	}
+	keys.WithLabelValues(request.Key, request.Namespace, request.Method, App.PrometheusStatusTest(status)).Inc()
+	App.WriteStatusMessage(status, w, request)
 }
 
 func GetFunctionName(i interface{}) string {

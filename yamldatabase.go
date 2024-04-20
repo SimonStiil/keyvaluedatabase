@@ -62,7 +62,7 @@ func (DB *YamlDatabase) PrivateInitialize() {
 	}
 }
 
-func (DB *YamlDatabase) Set(namespace string, key string, value interface{}) {
+func (DB *YamlDatabase) Set(namespace string, key string, value interface{}) error {
 	if !DB.Initialized {
 		panic("Unable to set. db not initialized()")
 	}
@@ -71,22 +71,44 @@ func (DB *YamlDatabase) Set(namespace string, key string, value interface{}) {
 		DB.Data[namespace] = map[string]string{}
 	}
 	DB.Data[namespace][key] = fmt.Sprint(value)
-	DB.Write()
+	return DB.Write()
 }
 
-func (DB *YamlDatabase) Get(namespace string, key string) (string, bool) {
+func (DB *YamlDatabase) CreateNamespace(namespace string) error {
+	if !DB.Initialized {
+		panic("Unable to get. db not initialized()")
+	}
+	if _, ok := DB.Data[namespace]; !ok {
+		DB.Data[namespace] = map[string]string{}
+	}
+	return nil
+}
+
+func (DB *YamlDatabase) DeleteNamespace(namespace string) error {
+	if !DB.Initialized {
+		panic("Unable to get. db not initialized()")
+	}
+	delete(DB.Data, namespace)
+	return nil
+}
+
+func (DB *YamlDatabase) Get(namespace string, key string) (string, error) {
 	if !DB.Initialized {
 		panic("Unable to get. db not initialized()")
 	}
 	// https://stackoverflow.com/questions/27545270/how-to-get-a-value-from-map
 	if _, ok := DB.Data[namespace]; !ok {
-		return "", ok
+		return "", fmt.Errorf("Namespace not found %v", namespace)
 	}
 	value, ok := DB.Data[namespace][key]
-	return value, ok
+	if ok {
+		return value, nil
+	} else {
+		return "", &ErrNotFound{Value: key}
+	}
 }
 
-func (DB *YamlDatabase) Write() {
+func (DB *YamlDatabase) Write() error {
 	//https://gobyexample.com/writing-files
 	// https://stackoverflow.com/questions/65207143/writing-the-contents-of-a-struct-to-yml-file
 	logger.Debug(fmt.Sprintf("Writing: %+v\n", DB.Data), "function", "Write", "struct", "YamlDatabase")
@@ -95,17 +117,19 @@ func (DB *YamlDatabase) Write() {
 
 	if err != nil {
 		logger.Error("error opening/creating file", "function", "Write", "struct", "YamlDatabase", "error", err)
+		return err
 	}
 	defer file.Close()
 	enc := yaml.NewEncoder(file)
 	err = enc.Encode(DB.Data)
 	if err != nil {
 		logger.Error("error encoding", "function", "Write", "struct", "YamlDatabase", "error", err)
+		return err
 	}
-
+	return nil
 }
 
-func (DB *YamlDatabase) Keys(namespace string) []string {
+func (DB *YamlDatabase) Keys(namespace string) ([]string, error) {
 	if !DB.Initialized {
 		panic("Unable to get. db not initialized()")
 	}
@@ -129,14 +153,15 @@ func (DB *YamlDatabase) Keys(namespace string) []string {
 			i++
 		}
 	}
-	return keys
+	return keys, nil
 }
 
-func (DB *YamlDatabase) Delete(namespace string, key string) {
+func (DB *YamlDatabase) DeleteKey(namespace string, key string) error {
 	if !DB.Initialized {
 		panic("Unable to get. db not initialized()")
 	}
 	delete(DB.Data[namespace], key)
+	return nil
 }
 
 func (DB *YamlDatabase) IsInitialized() bool {
