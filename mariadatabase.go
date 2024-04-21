@@ -185,7 +185,7 @@ func (MDB *MariaDatabase) DeleteNamespace(namespace string) error {
 	if namespace == MDB.GetSystemNS() {
 		return &ErrNotAllowed{Value: fmt.Sprintf("delete System NS %v", namespace)}
 	}
-	_, err := MDB.Connection.Exec(fmt.Sprintf("drop table if exists %v", namespace))
+	_, err := MDB.Connection.Exec(fmt.Sprintf("DROP TABLE IF EXISTS `%v`", namespace))
 	if err != nil {
 		logger.Error("Exec failed with error", "function", "Delete", "struct", "MariaDatabase", "namespace", namespace, "error", err)
 		return err
