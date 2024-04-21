@@ -6,10 +6,10 @@ const (
 	KeyMaxLength   uint16 = 64
 	ValueMaxLength uint16 = 16000
 
-	TypeKey       ObjectType = "Key"
-	TypeNamespace ObjectType = "Namespace"
-	TypeRoll      ObjectType = "Roll"
-	TypeGenerate  ObjectType = "Generate"
+	TypeKey       ObjectType = "key"
+	TypeNamespace ObjectType = "namespace"
+	TypeRoll      ObjectType = "roll"
+	TypeGenerate  ObjectType = "generate"
 )
 
 type ObjectV1 struct {

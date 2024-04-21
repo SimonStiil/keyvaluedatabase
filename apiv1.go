@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 
 	"github.com/SimonStiil/keyvaluedatabase/rest"
@@ -11,15 +10,15 @@ import (
 type APIv1 struct {
 }
 
-type APIv1Type uint
+type APIv1Type string
 
 const (
-	List               APIv1Type = 0
-	FullListKeys       APIv1Type = 1
-	Key                APIv1Type = 2
-	Error              APIv1Type = 4
-	FullListNamespaces APIv1Type = 5
-	Namespace          APIv1Type = 6
+	List               APIv1Type = "List"
+	FullListKeys       APIv1Type = "FullListKeys"
+	Key                APIv1Type = "Key"
+	Error              APIv1Type = "Error"
+	FullListNamespaces APIv1Type = "FullListNamespaces"
+	Namespace          APIv1Type = "Namespace"
 )
 
 func (Api *APIv1) APIPrefix() string {
@@ -32,12 +31,14 @@ func (api *APIv1) ApiController(w http.ResponseWriter, request *RequestParameter
 		data := rest.ObjectV1{}
 		err := App.decodeAny(request, &data)
 		if err != nil {
-			request.Logger.Log.Error("Unable to decode data", "error", err, "uuid", "imAqDGlP")
+			request.Logger.Log.Error("Unable to decode data", "error", err)
+			App.WriteStatusMessage(http.StatusBadRequest, w, request)
+			return
 		}
 		request.Attachment = &data
 	}
 	requestType := api.GetRequestType(request)
-	debugLogger.Debug("ApiController", "attachment", request.Attachment, "requestType", requestType, "uuid", "QGf11eGa")
+	debugLogger.Debug("ApiController", "attachment", request.Attachment, "requestType", requestType)
 	switch requestType {
 	case FullListKeys:
 		api.fullListKeys(w, request)
@@ -75,7 +76,13 @@ func (api *APIv1) GetRequestType(request *RequestParameters) APIv1Type {
 	if len(request.Namespace) > 0 && len(request.Key) > 0 {
 		return Key
 	}
+	if request.Method == "POST" && len(request.Namespace) > 0 && len(request.Key) == 0 {
+		return Key
+	}
 	if len(request.Namespace) > 0 && len(request.Key) == 0 {
+		return Namespace
+	}
+	if request.Method == "POST" && len(request.Namespace) == 0 && len(request.Key) == 0 {
 		return Namespace
 	}
 	return Error
@@ -274,7 +281,8 @@ func (api *APIv1) key(w http.ResponseWriter, request *RequestParameters) {
 		App.WriteStatusMessage(status, w, request)
 		return
 	case "UPDATE", "PATCH":
-		debugLogger.Debug("PUT Content",
+		status = http.StatusCreated
+		debugLogger.Debug("UPDATE Content",
 			"update.type", request.Attachment.Type,
 			"update.value", request.Attachment.Value)
 		newKey := request.Key
@@ -283,48 +291,53 @@ func (api *APIv1) key(w http.ResponseWriter, request *RequestParameters) {
 		}
 		newData := rest.KVPairV2{Key: newKey, Namespace: request.Namespace, Value: AuthGenerateRandomString(32)}
 
-		debugLogger.Debug("UPDATE random",
-			"newData.key", newData.Key, "newData.value", newData.Value)
 		_, err := App.DB.Get(request.Namespace, request.Key)
-		exists := err != nil
+		exists := err == nil
 		if !exists {
-			if !errors.Is(err, &ErrNotFound{}) {
+			if _, ok := err.(*ErrNotFound); !ok {
 				status = http.StatusInternalServerError
-				debugLogger.Debug("Error setting key in db", "Error", err)
+				debugLogger.Debug("Error getting key in db", "Error", err)
 				keys.WithLabelValues(request.Key, request.Namespace, request.Method, App.PrometheusStatusTest(status)).Inc()
 				App.WriteStatusMessage(status, w, request)
 				return
 			}
 		}
-		if request.Attachment.Type == rest.TypeRoll && exists {
-			err := App.DB.Set(newData.Namespace, newData.Key, newData.Value)
-			if err != nil {
-				debugLogger.Debug("Error setting key in db", "Error", err)
-				status := http.StatusInternalServerError
-				keys.WithLabelValues(request.Key, request.Namespace, request.Method, App.PrometheusStatusTest(status)).Inc()
-				App.WriteStatusMessage(status, w, request)
+		debugLogger.Debug("UPDATE random",
+			"newData.key", newData.Key, "newData.value", newData.Value, "exists", exists)
+		if exists {
+			if request.Attachment.Type == rest.TypeRoll {
+				err := App.DB.Set(newData.Namespace, newData.Key, newData.Value)
+				if err != nil {
+					debugLogger.Debug("Error setting key in db", "Error", err)
+					status = http.StatusInternalServerError
+					keys.WithLabelValues(request.Key, request.Namespace, request.Method, App.PrometheusStatusTest(status)).Inc()
+					App.WriteStatusMessage(status, w, request)
+					return
+				}
+				keys.WithLabelValues(request.Key, request.Namespace, request.Method, http.StatusText(status)).Inc()
+				request.Logger.Log.Info("Handeled Reqeust", "status", status, "status-text", http.StatusText(status))
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(status)
+				json.NewEncoder(w).Encode(newData)
 				return
 			}
-			keys.WithLabelValues(request.Key, request.Namespace, request.Method, http.StatusText(status)).Inc()
-			request.Logger.Log.Info("Handeled Reqeust", "status", status, "status-text", http.StatusText(status))
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(newData)
-			return
-		}
-		if request.Attachment.Type == rest.TypeGenerate && !exists {
-			err := App.DB.Set(newData.Namespace, newData.Key, newData.Value)
-			if err != nil {
-				debugLogger.Debug("Error setting key in db", "Error", err)
-				status := http.StatusInternalServerError
-				keys.WithLabelValues(request.Key, request.Namespace, request.Method, App.PrometheusStatusTest(status)).Inc()
-				App.WriteStatusMessage(status, w, request)
+		} else {
+			if request.Attachment.Type == rest.TypeGenerate {
+				err := App.DB.Set(newData.Namespace, newData.Key, newData.Value)
+				if err != nil {
+					debugLogger.Debug("Error setting key in db", "Error", err)
+					status := http.StatusInternalServerError
+					keys.WithLabelValues(request.Key, request.Namespace, request.Method, App.PrometheusStatusTest(status)).Inc()
+					App.WriteStatusMessage(status, w, request)
+					return
+				}
+				keys.WithLabelValues(request.Key, request.Namespace, request.Method, http.StatusText(status)).Inc()
+				request.Logger.Log.Info("Handeled Reqeust", "status", status, "status-text", http.StatusText(status))
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(status)
+				json.NewEncoder(w).Encode(newData)
 				return
 			}
-			keys.WithLabelValues(request.Key, request.Namespace, request.Method, http.StatusText(status)).Inc()
-			request.Logger.Log.Info("Handeled Reqeust", "status", status, "status-text", http.StatusText(status))
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(newData)
-			return
 		}
 		keys.WithLabelValues(request.Namespace, request.Key, "UPDATE", "BadRequest").Inc()
 		App.WriteStatusMessage(http.StatusBadRequest, w, request)
@@ -333,6 +346,9 @@ func (api *APIv1) key(w http.ResponseWriter, request *RequestParameters) {
 		err := App.DB.DeleteKey(request.Namespace, request.Key)
 		if err != nil {
 			status := http.StatusInternalServerError
+			if _, ok := err.(*ErrNotAllowed); ok {
+				status = http.StatusForbidden
+			}
 			debugLogger.Debug("Error deleting key in db", "Error", err)
 			keys.WithLabelValues(request.Key, request.Namespace, request.Method, App.PrometheusStatusTest(status)).Inc()
 			App.WriteStatusMessage(status, w, request)
@@ -385,7 +401,10 @@ func (api *APIv1) namespace(w http.ResponseWriter, request *RequestParameters) {
 		err := App.DB.DeleteNamespace(request.Namespace)
 		if err != nil {
 			status = http.StatusInternalServerError
-			debugLogger.Debug("Error creating namespace in db", "Error", err)
+			if _, ok := err.(*ErrNotAllowed); ok {
+				status = http.StatusForbidden
+			}
+			debugLogger.Debug("Error deleting namespace in db", "Error", err)
 			keys.WithLabelValues(request.Key, request.Namespace, request.Method, App.PrometheusStatusTest(status)).Inc()
 			App.WriteStatusMessage(status, w, request)
 			return
@@ -410,6 +429,13 @@ func (api *APIv1) Permissions(request *RequestParameters) *ConfigPermissions {
 	case Key:
 		switch request.Method {
 		case "GET":
+			if App.Config.PublicReadableNamespaces != nil && len(App.Config.PublicReadableNamespaces) > 0 {
+				for _, namespace := range App.Config.PublicReadableNamespaces {
+					if request.Namespace == namespace {
+						return &ConfigPermissions{}
+					}
+				}
+			}
 			return &ConfigPermissions{Read: true}
 		case "POST", "PUT", "UPDATE", "PATCH", "DELETE":
 			return &ConfigPermissions{Write: true}

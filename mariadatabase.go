@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"database/sql"
 
@@ -94,6 +95,9 @@ func (MDB *MariaDatabase) Get(namespace string, key string) (string, error) {
 	rows, err := MDB.Connection.Query(fmt.Sprintf("select * from `%v` where `%v` = ? ", namespace, MDB.Config.KeyName), key)
 
 	if err != nil {
+		if strings.Contains(err.Error(), "Error 1146 (42S02)") {
+			return "", &ErrNotFound{Value: namespace}
+		}
 		logger.Error("Query failed with error", "function", "Get", "struct", "MariaDatabase", "namespace", namespace, "error", err)
 		return "", err
 	}
@@ -179,14 +183,9 @@ func (MDB *MariaDatabase) DeleteNamespace(namespace string) error {
 		panic("F Unable to get. db not initialized()")
 	}
 	if namespace == MDB.GetSystemNS() {
-		return fmt.Errorf("unable to delete System NS %v", namespace)
+		return &ErrNotAllowed{Value: fmt.Sprintf("delete System NS %v", namespace)}
 	}
-	stmt, err := MDB.Connection.Prepare("drop table if exists ?")
-	if err != nil {
-		logger.Error("Prepare failed with error", "function", "Delete", "struct", "MariaDatabase", "namespace", namespace, "error", err)
-		return err
-	}
-	_, err = stmt.Exec(namespace)
+	_, err := MDB.Connection.Exec(fmt.Sprintf("drop table if exists %v", namespace))
 	if err != nil {
 		logger.Error("Exec failed with error", "function", "Delete", "struct", "MariaDatabase", "namespace", namespace, "error", err)
 		return err

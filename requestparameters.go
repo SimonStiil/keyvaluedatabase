@@ -24,6 +24,7 @@ type RequestParameters struct {
 	Namespace  string
 	Key        string
 	orgRequest *http.Request
+	Body       string
 	RequestIP  string
 	ID         uint32
 	Logger     struct {

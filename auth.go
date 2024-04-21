@@ -23,6 +23,8 @@ type Auth struct {
 	}
 }
 
+var AnonymounsUser User
+
 // https://www.alexedwards.net/blog/basic-authentication-in-go
 // https://medium.com/@matryer/the-http-handler-wrapper-technique-in-golang-updated-bc7fbcffa702
 func (Auth *Auth) Authentication(request *RequestParameters) bool {
@@ -36,7 +38,6 @@ func (Auth *Auth) Authentication(request *RequestParameters) bool {
 			if AuthTest(passwordHash, user.PasswordEnc) {
 				request.Authentication.Verified.Password = true
 			}
-			request.RequestIP, _ = Auth.GetIPHeaderFromRequest(request)
 			if user.HostAllowed(request.RequestIP, request.Logger.Ext) {
 				request.Authentication.Verified.Host = true
 			}

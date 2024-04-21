@@ -1,4 +1,6 @@
-debug: false
+logging: 
+  level: Info
+  format: text
 databaseType: yaml
 users:
 - username: user # Username
@@ -30,6 +32,8 @@ users:
       read: true
       write: false
       list: false
+publicReadableNamespaces:
+- public
 trustedProxies: # List of hosts that are trusted reading HostHeadders for. If request not from list only ip origin will be used
 - 172.17.0.1
 redis:

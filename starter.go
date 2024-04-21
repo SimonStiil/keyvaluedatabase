@@ -38,15 +38,16 @@ var (
 )
 
 type ConfigType struct {
-	Logging        ConfigLogging    `mapstructure:"logging"`
-	Port           string           `mapstructure:"port"`
-	DatabaseType   string           `mapstructure:"databaseType"`
-	Users          []ConfigUser     `mapstructure:"users"`
-	MTLS           MTLSConfig       `mapstructure:"mtls"`
-	TrustedProxies []string         `mapstructure:"trustedProxies"`
-	Redis          ConfigRedis      `mapstructure:"redis"`
-	Mysql          ConfigMysql      `mapstructure:"mysql"`
-	Prometheus     ConfigPrometheus `mapstructure:"prometheus"`
+	Logging                  ConfigLogging    `mapstructure:"logging"`
+	Port                     string           `mapstructure:"port"`
+	DatabaseType             string           `mapstructure:"databaseType"`
+	Users                    []ConfigUser     `mapstructure:"users"`
+	MTLS                     MTLSConfig       `mapstructure:"mtls"`
+	TrustedProxies           []string         `mapstructure:"trustedProxies"`
+	PublicReadableNamespaces []string         `mapstructure:"publicReadableNamespaces"`
+	Redis                    ConfigRedis      `mapstructure:"redis"`
+	Mysql                    ConfigMysql      `mapstructure:"mysql"`
+	Prometheus               ConfigPrometheus `mapstructure:"prometheus"`
 }
 type ConfigLogging struct {
 	Level  string `mapstructure:"level"`
@@ -71,6 +72,11 @@ type ConfigPermissions struct {
 	Write bool `mapstructure:"write"`
 	List  bool `mapstructure:"list"`
 }
+
+func (perm *ConfigPermissions) globalAllowed() bool {
+	return !perm.List && !perm.Read && !perm.Write
+}
+
 type ConfigPrometheus struct {
 	Enabled  bool   `mapstructure:"enabled"`
 	Endpoint string `mapstructure:"endpoint"`
@@ -145,7 +151,7 @@ func setupLogging(Logging ConfigLogging) {
 		debugLogger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: loggingLevel, AddSource: true}))
 	}
 	logger.Info("Logging started with options", "format", Logging.Format, "level", Logging.Level, "function", "setupLogging")
-	slog.SetDefault(logger)
+	//slog.SetDefault(logger)
 }
 
 func setupTestlogging() {

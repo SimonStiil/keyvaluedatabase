@@ -62,6 +62,13 @@ func TestApiV1(t *testing.T) {
 		if string(b) != createdBody {
 			t.Errorf(".Body got %q, want %q", string(b), createdBody)
 		}
+		dbValue, dbErr := App.DB.Get(testNamespace, testKey)
+		if dbErr != nil {
+			t.Errorf("Error Reading from db %v", dbErr)
+		}
+		if testData.Value != dbValue {
+			t.Errorf("data in database %v does not match posed value %v", dbValue, testData.Value)
+		}
 	})
 	testKey = "somenewkey"
 	testNamespace = "hello"
@@ -87,6 +94,13 @@ func TestApiV1(t *testing.T) {
 		if string(b) != createdBody {
 			t.Errorf(".Body got %q, want %q", string(b), createdBody)
 		}
+		dbValue, dbErr := App.DB.Get(testNamespace, testKey)
+		if dbErr != nil {
+			t.Errorf("Error Reading from db %v", dbErr)
+		}
+		if testData.Value != dbValue {
+			t.Errorf("data in database %v does not match posed value %v", dbValue, testData.Value)
+		}
 	})
 	testKey = "someotherkey"
 	t.Run("POST(raw)", func(t *testing.T) {
@@ -110,6 +124,13 @@ func TestApiV1(t *testing.T) {
 		if string(b) != createdBody {
 			t.Errorf(".Body got %q, want %q", string(b), createdBody)
 		}
+		dbValue, dbErr := App.DB.Get(testNamespace, testKey)
+		if dbErr != nil {
+			t.Errorf("Error Reading from db %v", dbErr)
+		}
+		if testData.Value != dbValue {
+			t.Errorf("data in database %v does not match posed value %v", dbValue, testData.Value)
+		}
 	})
 	testKey = "somedifferentkey"
 	testNamespace = "somenamespace"
@@ -118,7 +139,7 @@ func TestApiV1(t *testing.T) {
 			http.MethodPut,
 			fmt.Sprintf("%v/%v/%v", URLPrefix, testNamespace, testKey),
 			strings.NewReader(testData.Value))
-		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		//request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		response := httptest.NewRecorder()
 		requestParameters := GetRequestParameters(request, requestsCount)
 		requestsCount += 1
@@ -133,6 +154,129 @@ func TestApiV1(t *testing.T) {
 		}
 		if string(b) != createdBody {
 			t.Errorf(".Body got %q, want %q", string(b), createdBody)
+		}
+		dbValue, dbErr := App.DB.Get(testNamespace, testKey)
+		if dbErr != nil {
+			t.Errorf("Error Reading from db %v", dbErr)
+		}
+		if testData.Value != dbValue {
+			t.Errorf("data in database %v does not match posed value %v", dbValue, testData.Value)
+		}
+
+	})
+	testData = rest.ObjectV1{Type: rest.TypeGenerate, Value: ""}
+	testGeneratedKey := AuthGenerateRandomString(8)
+	t.Run("UPDATE(Generate) New", func(t *testing.T) {
+		marshalled, err := json.Marshal(testData)
+		if err != nil {
+			t.Fatalf("impossible to marshall teacher: %s", err)
+		}
+		request, _ := http.NewRequest(
+			"UPDATE",
+			fmt.Sprintf("%v/%v/%v", URLPrefix, testNamespace, testGeneratedKey),
+			bytes.NewReader(marshalled))
+		request.Header.Set("Content-Type", "application/json")
+		response := httptest.NewRecorder()
+		requestParameters := GetRequestParameters(request, requestsCount)
+		requestsCount += 1
+		api.ApiController(response, requestParameters)
+		if response.Code != http.StatusCreated {
+			t.Errorf(".Code got %v, want %v", response.Code, http.StatusCreated)
+		}
+		var replyPair rest.KVPairV2
+		err = json.Unmarshal(response.Body.Bytes(), &replyPair)
+		if err != nil {
+			t.Error(err)
+		}
+		if replyPair.Key != testGeneratedKey {
+			t.Errorf(".Key got %q, want %q", replyPair.Key, testGeneratedKey)
+		}
+		dbValue, dbErr := App.DB.Get(testNamespace, testGeneratedKey)
+		if dbErr != nil {
+			t.Errorf("Error Reading from db %v", dbErr)
+		}
+		if dbValue == "" {
+			t.Errorf("data in database not set")
+		}
+		if dbValue != replyPair.Value {
+			t.Errorf("data in database %v not matching reply data %v", dbValue, replyPair.Value)
+		}
+
+	})
+	t.Run("UPDATE(Generate) repeat", func(t *testing.T) {
+		marshalled, err := json.Marshal(testData)
+		if err != nil {
+			t.Fatalf("impossible to marshall teacher: %s", err)
+		}
+		request, _ := http.NewRequest(
+			"UPDATE",
+			fmt.Sprintf("%v/%v/%v", URLPrefix, testNamespace, testGeneratedKey),
+			bytes.NewReader(marshalled))
+		request.Header.Set("Content-Type", "application/json")
+		response := httptest.NewRecorder()
+		requestParameters := GetRequestParameters(request, requestsCount)
+		requestsCount += 1
+		api.ApiController(response, requestParameters)
+		if response.Code != http.StatusBadRequest {
+			t.Errorf(".Code got %v, want %v", response.Code, http.StatusBadRequest)
+		}
+	})
+	testData = rest.ObjectV1{Type: rest.TypeRoll, Value: ""}
+	t.Run("UPDATE(Roll) Repeat", func(t *testing.T) {
+		marshalled, err := json.Marshal(testData)
+		if err != nil {
+			t.Fatalf("impossible to marshall teacher: %s", err)
+		}
+		request, _ := http.NewRequest(
+			"UPDATE",
+			fmt.Sprintf("%v/%v/%v", URLPrefix, testNamespace, testGeneratedKey),
+			bytes.NewReader(marshalled))
+		request.Header.Set("Content-Type", "application/json")
+		response := httptest.NewRecorder()
+		requestParameters := GetRequestParameters(request, requestsCount)
+		requestsCount += 1
+		api.ApiController(response, requestParameters)
+		if response.Code != http.StatusCreated {
+			t.Errorf(".Code got %v, want %v", response.Code, http.StatusCreated)
+		}
+		var replyPair rest.KVPairV2
+		err = json.Unmarshal(response.Body.Bytes(), &replyPair)
+		if err != nil {
+			t.Error(err)
+		}
+		if replyPair.Key != testGeneratedKey {
+			t.Errorf(".Key got %q, want %q", replyPair.Key, testGeneratedKey)
+		}
+		dbValue, dbErr := App.DB.Get(testNamespace, testGeneratedKey)
+		if dbErr != nil {
+			t.Errorf("Error Reading from db %v", dbErr)
+		}
+		if dbValue == "" {
+			t.Errorf("data in database not set")
+		}
+		if dbValue != replyPair.Value {
+			t.Errorf("data in database %v not matching reply data %v", dbValue, replyPair.Value)
+		}
+
+	})
+	testGeneratedKey = AuthGenerateRandomString(8)
+	t.Run("UPDATE(Roll) New", func(t *testing.T) {
+		marshalled, err := json.Marshal(testData)
+		if err != nil {
+			t.Fatalf("impossible to marshall teacher: %s", err)
+		}
+		request, _ := http.NewRequest(
+			"UPDATE",
+			fmt.Sprintf("%v/%v/%v", URLPrefix, testNamespace, testGeneratedKey),
+			bytes.NewReader(marshalled))
+		request.Header.Set("Content-Type", "application/json")
+
+		response := httptest.NewRecorder()
+		requestParameters := GetRequestParameters(request, requestsCount)
+		requestsCount += 1
+		api.ApiController(response, requestParameters)
+		if response.Code != http.StatusBadRequest {
+			t.Errorf(".Code got %v, want %v", response.Code, http.StatusBadRequest)
 		}
 	})
 	t.Run("List keys", func(t *testing.T) {
@@ -160,6 +304,7 @@ func TestApiV1(t *testing.T) {
 			t.Errorf("list should not contain: %v", "counter")
 		}
 	})
+	testData = rest.ObjectV1{Type: rest.TypeKey, Value: "123"}
 	t.Run("Get", func(t *testing.T) {
 		request, _ := http.NewRequest(http.MethodGet,
 			fmt.Sprintf("%v/%v/%v", URLPrefix, testNamespace, testKey),
@@ -365,8 +510,8 @@ func TestApiV1(t *testing.T) {
 				if data.Access == true {
 					t.Errorf(".Access for %v shoud be true", data.Name)
 				}
-				if data.Size != 2 {
-					t.Errorf(".Size for %v shoud be 1", data.Name)
+				if data.Size != 3 {
+					t.Errorf(".Size for %v shoud be 3 was %v", data.Name, data.Size)
 				}
 			}
 			if data.Name == App.DB.GetSystemNS() {

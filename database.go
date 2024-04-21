@@ -24,3 +24,19 @@ type ErrNotFound struct {
 func (err *ErrNotFound) Error() string {
 	return fmt.Sprintf("%v not found", err.Value)
 }
+
+type ErrNotAllowed struct {
+	Value string
+}
+
+func (err *ErrNotAllowed) Error() string {
+	return fmt.Sprintf("%v now allowed", err.Value)
+}
+
+type ErrMalformRequest struct {
+	Value string
+}
+
+func (err *ErrMalformRequest) Error() string {
+	return err.Value
+}

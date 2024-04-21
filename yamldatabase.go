@@ -88,6 +88,9 @@ func (DB *YamlDatabase) DeleteNamespace(namespace string) error {
 	if !DB.Initialized {
 		panic("Unable to get. db not initialized()")
 	}
+	if namespace == DB.GetSystemNS() {
+		return &ErrNotAllowed{Value: fmt.Sprintf("delete System NS %v", namespace)}
+	}
 	delete(DB.Data, namespace)
 	return nil
 }
