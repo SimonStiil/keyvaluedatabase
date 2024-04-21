@@ -179,7 +179,7 @@ func (MDB *MariaDatabase) DeleteNamespace(namespace string) error {
 		panic("F Unable to get. db not initialized()")
 	}
 	if namespace == MDB.GetSystemNS() {
-		return fmt.Errorf("Unable to delete System NS %v", namespace)
+		return fmt.Errorf("unable to delete System NS %v", namespace)
 	}
 	stmt, err := MDB.Connection.Prepare("drop table if exists ?")
 	if err != nil {

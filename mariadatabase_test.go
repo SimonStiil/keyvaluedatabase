@@ -32,12 +32,12 @@ func Test_Maria_DB(t *testing.T) {
 	})
 
 	t.Run("get value (that don't exist)", func(t *testing.T) {
-		val, err := dbt.DB.Get(dbt.DB.GetSystemNS(), testKey)
-		if err != nil {
-			t.Errorf("Supposed to get key %v got error %+v", testKey, err)
+		_, err := dbt.DB.Get(dbt.DB.GetSystemNS(), testKey)
+		if err == nil {
+			t.Errorf("Supposed to get error")
 		}
-		if val != "" {
-			t.Errorf("Read from database failed expected %v, got %v", "", val)
+		if _, ok := err.(*ErrNotFound); !ok {
+			t.Errorf("Supposed to get ErrNotFound error got %v", err)
 		}
 	})
 	t.Run("set value", func(t *testing.T) {

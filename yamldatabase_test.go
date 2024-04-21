@@ -26,17 +26,17 @@ func Test_Yaml_DB(t *testing.T) {
 	testKey := "test"
 	testValue := "value"
 
-	t.Run("get value (that don't exist yet)", func(t *testing.T) {
-		val, err := dbt.DB.Get(dbt.DB.GetSystemNS(), testKey)
-		if err == nil {
-			t.Errorf("Supposed to get error ")
-		}
-		if val != "" {
-			t.Errorf("Read from database failed expected %v, got %v", "", val)
-		}
-	})
 	t.Run("set value", func(t *testing.T) {
 		dbt.DB.Set(dbt.DB.GetSystemNS(), testKey, testValue)
+	})
+	t.Run("get value (that don't exist yet)", func(t *testing.T) {
+		_, err := dbt.DB.Get(dbt.DB.GetSystemNS(), testKey+"13")
+		if err == nil {
+			t.Errorf("Supposed to get error")
+		}
+		if _, ok := err.(*ErrNotFound); !ok {
+			t.Errorf("Supposed to get ErrNotFound error got %v if tyoe %t", err, err)
+		}
 	})
 
 	t.Run("get value", func(t *testing.T) {
