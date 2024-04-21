@@ -13,8 +13,9 @@ type DBTest struct {
 
 func Test_Yaml_DB(t *testing.T) {
 	dbt := new(DBTest)
+	setupTestlogging()
 	dbt.FileName = "testdb.yaml"
-	dbt.DB = &YamlDatabase{DatabaseName: dbt.FileName, Config: &ConfigType{Debug: true}}
+	dbt.DB = &YamlDatabase{DatabaseName: dbt.FileName}
 	t.Run("initialize fresh db", func(t *testing.T) {
 		err := os.Remove(dbt.FileName)
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -25,30 +26,30 @@ func Test_Yaml_DB(t *testing.T) {
 	testKey := "test"
 	testValue := "value"
 
-	t.Run("get value (that don't exist yet)", func(t *testing.T) {
-		val, ok := dbt.DB.Get(testKey)
-		if ok {
-			t.Errorf("Supposed to not key %v", testKey)
-		}
-		if val != "" {
-			t.Errorf("Read from database failed expected %v, got %v", "", val)
-		}
-	})
 	t.Run("set value", func(t *testing.T) {
-		dbt.DB.Set(testKey, testValue)
+		dbt.DB.Set(dbt.DB.GetSystemNS(), testKey, testValue)
+	})
+	t.Run("get value (that don't exist yet)", func(t *testing.T) {
+		_, err := dbt.DB.Get(dbt.DB.GetSystemNS(), testKey+"13")
+		if err == nil {
+			t.Errorf("Supposed to get error")
+		}
+		if _, ok := err.(*ErrNotFound); !ok {
+			t.Errorf("Supposed to get ErrNotFound error got %v if tyoe %t", err, err)
+		}
 	})
 
 	t.Run("get value", func(t *testing.T) {
-		val, ok := dbt.DB.Get(testKey)
-		if !ok {
-			t.Errorf("Supposed to contain key %v", testKey)
+		val, err := dbt.DB.Get(dbt.DB.GetSystemNS(), testKey)
+		if err != nil {
+			t.Errorf("Supposed to get key %v got error %+v", testKey, err)
 		}
 		if testValue != val {
 			t.Errorf("Read from database failed expected %v, got %v", testValue, val)
 		}
 	})
 	t.Run("Counter Integration Test (stored db)", func(t *testing.T) {
-		count := Counter{Config: &ConfigType{Debug: true}}
+		count := Counter{}
 		err := os.Remove(dbt.FileName)
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			t.Fatal(err)
@@ -75,7 +76,7 @@ func Test_Yaml_DB(t *testing.T) {
 		}
 	})
 	t.Run("Counter Integration Test (fresh db)", func(t *testing.T) {
-		count := Counter{Config: &ConfigType{Debug: true}}
+		count := Counter{}
 		err := os.Remove(dbt.FileName)
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			t.Fatal(err)

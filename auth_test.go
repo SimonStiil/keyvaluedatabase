@@ -1,10 +1,16 @@
 package main
 
 import (
+	"fmt"
 	"testing"
 )
 
+type HostCheckTest struct {
+	User User
+}
+
 func Test_Auth(t *testing.T) {
+	setupTestlogging()
 	t.Run("Auth Hash And Encoding", func(t *testing.T) {
 		data := "hello"
 		expected := "LPJNul+wow4m6DsqxbninhsWHlwfp0JecwQzYpOLmCQ="
@@ -67,6 +73,59 @@ func Test_Auth(t *testing.T) {
 					t.Errorf("Permission %v expecting %v supposed to %v", testKey, expectedKey, testResult)
 				}
 			}
+		}
+	})
+
+	HCT := new(HostCheckTest)
+	HCT.User.Hosts = []string{
+		"192.168.0.1",
+		"192.168.0.1/24",
+		"example.com",
+		"hello.world",
+	}
+
+	ip := "192.168.0.1"
+	t.Run(fmt.Sprintf("normal ip %s in range", ip), func(t *testing.T) {
+		allowed := HCT.User.HostAllowed(ip, logger)
+		if !allowed {
+			t.Errorf("failed for host %v", ip)
+		}
+	})
+	ip = "192.168.0.12"
+	t.Run(fmt.Sprintf("CIDR ip %s in range \"pass\"", ip), func(t *testing.T) {
+		allowed := HCT.User.HostAllowed(ip, logger)
+		if !allowed {
+			t.Errorf("failed for host %v", ip)
+		}
+	})
+	// example.com IP's based on nslookup example.com
+	ip = "93.184.215.14"
+	t.Run(fmt.Sprintf("DNS for ip %s", ip), func(t *testing.T) {
+		allowed := HCT.User.HostAllowed(ip, logger)
+		if !allowed {
+			t.Errorf("failed for host %v", ip)
+		}
+	})
+	// Fail tests
+	ip = "127.0.0.1"
+	t.Run(fmt.Sprintf("normal ip not in list %s \"fail\"", ip), func(t *testing.T) {
+		allowed := HCT.User.HostAllowed(ip, logger)
+		if allowed {
+			t.Errorf("failed for host %v", ip)
+		}
+	})
+	ip = "172.16.0.1"
+	t.Run(fmt.Sprintf("normal ip not in list %s \"fail\"", ip), func(t *testing.T) {
+		allowed := HCT.User.HostAllowed(ip, logger)
+		if allowed {
+			t.Errorf("failed for host %v", ip)
+		}
+	})
+	ip = "hello.world"
+	t.Run(fmt.Sprintf("normal ip %s \"fail\"", ip), func(t *testing.T) {
+		allowed := HCT.User.HostAllowed(ip, logger)
+		if allowed {
+			t.Errorf("failed for host %v", ip)
 		}
 	})
 }

@@ -23,20 +23,20 @@ Example can be seen in [example-config.yaml](./example-config.yaml)
 
 | Option | Description ( Defaults ) |
 | ------ | ----------- |
-| debug | Enable debugging output (developer focused) |
+| logging.level | Log level Debug, (Info), Warn, Error  |
+| logging.format | (text), yaml |
 | databaseType | Type of backend Database (mysql), redis or yaml |
 | users | List of Users |
 | users.username | Username of user for login |
 | users.password | Password for user, get hash from -generate (see commandline options)  |
-| users.permissions | Permissions of user |
-| users.permissions.read | Has read permission if from valid host |
-| users.permissions.write | Has write permission if from valid host |
-| users.permissions.list | Has list permission if from valid host |
+| users.hosts | List of host user can login from ip, CIDR, dns |
+| users.permissionsset | List of namespace permissions |
+| users.permissionsset.namespaces | List of namespaces covered by permission |
+| users.permissionsset.permissions.read | Has read permission if from valid host |
+| users.permissionsset.permissions.write | Has write permission if from valid host |
+| users.permissionsset.permissions.list | Has list permission if from valid host |
 | trustedProxies | List of proxy ipes to trust headders from |
-| hosts.address | Limit access by host, Least priviliges of host and user are used |
-| hosts.permissions | Permissions of host |
-| hosts.permissions.read | Has read permission if valid user |
-| hosts.permissions.write | Has write permission if valid user |
+| publicReadableNamespaces | List of namespaces that are public readable |
 | prometheus | Prometheus settings |
 | prometheus.enabled | Prometheus enabled (true) |
 | prometheus.endpoint | Prometheus endpoint (/system/metrics) |
@@ -63,88 +63,123 @@ Example:
 | KVDB_REDIS_PASSWORD | Password for Redis database backend |
 
 ## Usage
-Get key hello from db  
-\[Requires GET permission\]  
+
+Create test namespace
+\[Requires write permission\]  
 ```bash
-curl localhost:8080/hello -u test:test
-{"key":"hello","value":"world"}
+curl -u test:test http://localhost:8080/v1 -XPOST -d "test"
+201 Created
+```
+
+Create Delete namespace
+\[Requires write permission\]  
+```bash
+curl -u test:test http://localhost:8080/v1/test -XDELETE
+200 OK
+```
+
+List namespace
+\[Requires list permission\]  
+```bash
+curl -u test:test http://localhost:8080/v1/
+["kvdb","test"]
 ```
 
 Set key hello with value world to db.  
 Supports POST.  
  \[Requires write permission\]  
 ```bash
-curl localhost:8080/hello -u test:test -XPOST -d "world"
-OK
+curl -u test:test http://localhost:8080/v1/test/hello -XPOST -d "world"
+201 Created
 ```
 
 Set key hello with value world to db using "value".  
 Supports POST.  
  \[Requires write permission\]  
 ```bash
-curl localhost:8080/hello -u test:test -XPOST -d "value=world"
-OK
+curl -u test:test http://localhost:8080/v1/test/hello -XPOST -d "value=world"
+201 Created
 ```
 
 Set key hello with value world in json format to db.  
 Supports POST.  
  \[Requires write permission\]  
 ```bash
-curl localhost:8080/hello -u test:test -XPOST -d '{"value": "world"}' -H 'Content-Type: application/json'
-OK
+curl -u test:test http://localhost:8080/v1/test/hello -XPOST -d '{"type": "Key", "value": "world"}' -H 'Content-Type: application/json'
+201 Created
 ```
 
 Put file content of world.txt to key hello in db.  
 Supports PUT.  
  \[Requires write permission\]  
 ```bash
-curl localhost:8080/hello -u test:test -T world.txt
-OK
+curl -u test:test http://localhost:8080/v1/test/hello -T world.txt
+201 Created
 ```
-
 Note, When writing a complex stucture with Base64 encoding or special charachers use PUT or Post with the pure content.  
 If data contains value= be sure to use put. Otherwise the application/x-www-form-urlencoded decoding will fail.
+
+
+Get key hello from test
+\[Requires read permission\]  
+```bash
+curl -u test:test http://localhost:8080/v1/test/hello
+{"key":"hello","namespace":"test","value":"world"}
+```
+
+List keys in test namespace  
+\[Requires list permission\]  
+```bash
+curl -u test:test http://localhost:8080/v1/test
+["hello"]
+```
 
 Delete key hello from db.  
 \[Requires write permission\]  
 ```bash
-curl localhost:8080/hello -u test:test -XDELETE
-OK
-```
-
-List keys in db  
-\[Requires list permission\]  
-```bash
-curl localhost:8080/system/list -u test:test
-["counter","hello"]
+curl -u test:test http://localhost:8080/v1/test/hello -XDELETE
+200 OK
 ```
 
 Generate random 32 character value for key in json format (Only works if key does not Exists)  
 Supports both UPDATE and PATCH for json. Only PATCH for www-form-data.  
 \[Requires write permission\]  
 ```bash
-curl localhost:8080/hello -XUPDATE -d '{"type": "generate"}' -H 'Content-Type: application/json' -u test:test
-{"key":"hello","value":"sBMaPqBPILWLagndcEpq8n27EtydU2m7"}
+curl  -u test:test http://localhost:8080/v1/test/hello -XUPDATE -d '{"type": "generate"}' -H 'Content-Type: application/json'
+{"key":"hello","namespace":"test","value":"4wBZ3VhV9ZoxVjkOz87fQFpnoEe0jCCh"}
 ```
 ```bash
-curl localhost:8080/hello -XPATCH -d "type=generate" -u test:test
-{"key":"hello","value":"Nnj169wPuONxmn7OIWkjX49ujAom6Z2O"}
+curl -u test:test http://localhost:8080/v1/test/hello -XPATCH -d "type=generate"
+{"key":"hello","namespace":"test","value":"4wBZ3VhV9ZoxVjkOz87fQFpnoEe0jCCh"}
 ```
 
 Roll data stored in key to random 32 character value in json format (Only works if key Exists)  
 Supports both UPDATE and PATCH for json. Only PATCH for www-form-data.  
 \[Requires write permission\]  
 ```bash
-curl localhost:8080/hello -XUPDATE -d '{"type": "roll"}' -H 'Content-Type: application/json' -u test:test
-{"key":"hello","value":"vubU7vLMJWSeh7sQqCGydJSbyjr4DCRd"}
+curl -u test:test http://localhost:8080/v1/test/hello -XUPDATE -d '{"type": "roll"}' -H 'Content-Type: application/json'
+{"key":"hello","namespace":"test","value":"4wBZ3VhV9ZoxVjkOz87fQFpnoEe0jCCh"}
 ```
 ```bash
-curl localhost:8080/hello -XPATCH -d "type=roll" -u test:test
-{"key":"hello","value":"Llq5q9xuocJBVHoG5ufo1CjIgo9i7YT7"}
+curl -u test:test http://localhost:8080/v1/test/hello -XPATCH -d "type=roll"
+{"key":"hello","namespace":"test","value":"4wBZ3VhV9ZoxVjkOz87fQFpnoEe0jCCh"}
 ```
 
 Health endpoint  
 ```bash
 curl localhost:8080/system/health -u test:test
 {"status":"UP","requests":87}
+```
+
+##Public access
+config option `publicReadableNamespaces:` allows for a list of namespaces you can read from but not write or list publicly
+
+```bash
+curl -u test:test http://localhost:8080/v1/public/hello -XPOST -d "world"
+201 Created
+```
+
+```bash
+curl http://localhost:8080/v1/public/hello
+{"key":"hello","namespace":"public","value":"world"}
 ```

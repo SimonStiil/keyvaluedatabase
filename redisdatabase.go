@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"log"
+	"fmt"
 	"os"
 
 	redis "github.com/redis/go-redis/v9"
@@ -13,88 +13,125 @@ type RedisDatabase struct {
 	Initialized bool
 	CTX         context.Context
 	RDC         *redis.Client
-	Config      *ConfigType
+	Config      *ConfigRedis
 	Password    string
 }
 
 type ConfigRedis struct {
 	Address         string `mapstructure:"address"`
+	Prefix          string `mapstructure:"prefix"`
+	SystemNS        string `mapstructure:"systemnamespace"`
+	Seperator       string `mapstructure:"seperator"`
 	EnvVariableName string `mapstructure:"envVariableName"`
 }
 
 func RedisDBGetDefaults(configReader *viper.Viper) {
 	configReader.SetDefault("redis.address", "localhost:6379")
+	configReader.SetDefault("redis.prefix", "kvdb")
+	configReader.SetDefault("redis.systemnamespace", "kvdb")
+	configReader.SetDefault("redis.seperator", "_")
 	configReader.SetDefault("redis.envVariableName", BaseENVname+"_REDIS_PASSWORD")
 }
 
-func (DB *RedisDatabase) Init() {
-	if DB.Config.Debug {
-		log.Println("db.init (redis)")
-	}
+func (DB *RedisDatabase) GetSystemNS() string {
+	return DB.Config.SystemNS
+}
 
-	DB.Password = os.Getenv(DB.Config.Redis.EnvVariableName)
+func (DB *RedisDatabase) Init() {
+
+	logger.Debug("Initializing Redis Connection", "function", "Init", "struct", "RedisDatabase")
+
+	DB.Password = os.Getenv(DB.Config.EnvVariableName)
 	DB.CTX = context.Background()
 	DB.RDC = redis.NewClient(&redis.Options{
-		Addr:     DB.Config.Redis.Address,
+		Addr:     DB.Config.Address,
 		Password: DB.Password, // no password set
 		DB:       1,           // use default DB
 	})
-	if DB.Config.Debug {
-		log.Println("db.init - complete")
-	}
+	logger.Debug("Initialization complete", "function", "Init", "struct", "RedisDatabase")
 	DB.Initialized = true
 }
 
-func (DB *RedisDatabase) Set(key string, value interface{}) {
+func (DB *RedisDatabase) formatKey(namespace string, key string) string {
+	return fmt.Sprintf("%v%v%v%v%v", DB.Config.Prefix, DB.Config.Seperator, namespace, DB.Config.Seperator, key)
+}
+
+func (DB *RedisDatabase) Set(namespace string, key string, value interface{}) error {
 	if !DB.Initialized {
 		panic("Unable to set. db not initialized()")
 	}
-	err := DB.RDC.Set(DB.CTX, key, value, 0).Err() //0 is ttl
+	err := DB.RDC.Set(DB.CTX, DB.formatKey(namespace, key), value, 0).Err() //0 is ttl
 	if err != nil {
-		panic(err)
+		return err
 	}
+	return nil
 }
 
-func (DB *RedisDatabase) Get(key string) (string, bool) {
+func (DB *RedisDatabase) Get(namespace string, key string) (string, error) {
 	if !DB.Initialized {
 		panic("Unable to get. db not initialized()")
 	}
-	val, err := DB.RDC.Get(DB.CTX, key).Result()
+	val, err := DB.RDC.Get(DB.CTX, DB.formatKey(namespace, key)).Result()
 	if err == redis.Nil {
-		return "", false
+		return "", &ErrNotFound{Value: key}
 	} else if err != nil {
-		panic(err)
+		return "", err
 	}
-	return val, true
+	return val, nil
 }
 
-func (DB *RedisDatabase) Keys() []string {
+func (DB *RedisDatabase) Keys(namespace string) ([]string, error) {
 	if !DB.Initialized {
 		panic("Unable to get. db not initialized()")
 	}
-	val, err := DB.RDC.Keys(DB.CTX, "*").Result()
+	var val []string
+	var err error
+	if namespace == "" {
+		val, err = DB.RDC.Keys(DB.CTX, fmt.Sprintf("%v%v*", DB.Config.Prefix, DB.Config.Seperator)).Result()
+	} else {
+		val, err = DB.RDC.Keys(DB.CTX, fmt.Sprintf("%v%v%v%v*", DB.Config.Prefix, DB.Config.Seperator, namespace, DB.Config.Seperator)).Result()
+	}
 
-	if DB.Config.Debug {
-		log.Printf("DB.List: %v %v\n", val, err)
-	}
+	logger.Debug("List", "function", "Keys", "struct", "RedisDatabase", "values", val, "error", err)
 	if err == redis.Nil {
-		return val
+		return val, nil
 	} else if err != nil {
-		panic(err)
+		return val, err
 	}
-	return val
+	//TODO: Remove prefix from keys
+	//if namespace == "" {
+	//TODO: Add filtering to only get namespace names not all full keys
+	//}
+	return val, nil
 }
 
-func (DB *RedisDatabase) Delete(key string) {
+func (DB *RedisDatabase) CreateNamespace(namespace string) error {
+	if !DB.Initialized {
+		panic("F Unable to get. db not initialized()")
+	}
+	// Stub. Concept does not exist missing keys list implementation
+	return nil
+}
+
+func (DB *RedisDatabase) DeleteNamespace(namespace string) error {
+	if !DB.Initialized {
+		panic("F Unable to get. db not initialized()")
+	}
+	// Stub. Concept does not exist missing keys list implementation
+	return nil
+}
+
+func (DB *RedisDatabase) DeleteKey(namespace string, key string) error {
 	if !DB.Initialized {
 		panic("Unable to get. db not initialized()")
 	}
-	err := DB.RDC.Del(DB.CTX, key).Err()
+	err := DB.RDC.Del(DB.CTX, DB.formatKey(namespace, key)).Err()
 	if err == redis.Nil {
-		return
+		return nil
 	} else if err != nil {
-		panic(err)
+		return err
 	}
+	return nil
 }
 
 func (DB *RedisDatabase) IsInitialized() bool {
@@ -109,7 +146,5 @@ func (DB *RedisDatabase) Close() {
 	if err != nil {
 		panic(err)
 	}
-	if DB.Config.Debug {
-		log.Println("db.closed")
-	}
+	logger.Debug("Closed Connection", "function", "Close", "struct", "RedisDatabase")
 }
