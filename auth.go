@@ -143,10 +143,7 @@ func (Auth *Auth) AuthGenerate(generate string, test string) {
 }
 func (Auth *Auth) Init(config ConfigType) {
 	Auth.Config = config
-	Auth.Users = make(map[string]User)
-	for _, v := range config.Users {
-		Auth.Users[v.Username] = AuthUnpack(v)
-	}
+	Auth.LoadConfig(config)
 	logger.Debug(fmt.Sprintf("Auth.Users: %+v", Auth.Users), "function", "Init", "struct", "Auth")
 	logger.Debug(fmt.Sprintf("Loaded %v users", len(Auth.Users)), "function", "Init", "struct", "Auth")
 	Auth.HostHeaders = []string{
@@ -161,8 +158,17 @@ func (Auth *Auth) Init(config ConfigType) {
 		"Proxy-Client-IP",
 		"WL-Proxy-Client-IP",
 		"REMOTE_ADDR"}
+}
+
+func (Auth *Auth) LoadConfig(config ConfigType) {
+	users := make(map[string]User)
+	for _, v := range config.Users {
+		users[v.Username] = AuthUnpack(v)
+	}
+	Auth.Users = users
 	Auth.Permissions.ListFull = &ConfigPermissions{List: true, Read: true}
 	Auth.Permissions.List = &ConfigPermissions{List: true}
+	logger.Debug(fmt.Sprintf("Loaded %v users", len(Auth.Users)), "function", "Init", "struct", "Auth")
 }
 
 type User struct {
