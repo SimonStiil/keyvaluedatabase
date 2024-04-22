@@ -167,7 +167,7 @@ curl -u test:test http://localhost:8080/v1/test/hello -XPATCH -d "type=roll"
 
 Health endpoint  
 ```bash
-curl localhost:8080/system/health -u test:test
+curl localhost:8080/system/health
 {"status":"UP","requests":87}
 ```
 

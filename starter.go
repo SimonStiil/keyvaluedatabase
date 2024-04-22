@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -96,7 +97,7 @@ const (
 	BaseENVname = "KVDB"
 )
 
-func ConfigRead(configFileName string, configOutput *ConfigType) {
+func ConfigRead(configFileName string, configOutput *ConfigType) *viper.Viper {
 	configReader := viper.New()
 	configReader.SetConfigName(configFileName)
 	configReader.SetConfigType("yaml")
@@ -127,7 +128,17 @@ func ConfigRead(configFileName string, configOutput *ConfigType) {
 	}
 	configReader.AutomaticEnv()
 	configReader.Unmarshal(configOutput)
+	return configReader
 }
+
+func SetupConfigWatcher(logger *slog.Logger, configReader *viper.Viper, App *Application) {
+	configReader.OnConfigChange(func(e fsnotify.Event) {
+		logger.Info(fmt.Sprintf("Config file changed: %v", e.Name))
+		App.Auth.LoadConfig(App.Config)
+	})
+	configReader.WatchConfig()
+}
+
 func setupLogging(Logging ConfigLogging) {
 	logLevel := strings.ToLower(Logging.Level)
 	logFormat := strings.ToLower(Logging.Format)
@@ -168,7 +179,7 @@ func main() {
 	flag.StringVar(&configFileName, "config", "config", "Use a different config file name")
 	flag.Parse()
 	App = new(Application)
-	ConfigRead(configFileName, &App.Config)
+	configReader := ConfigRead(configFileName, &App.Config)
 	// Logging setup
 	setupLogging(App.Config.Logging)
 	App.Auth.AuthGenerate(generate, test)
@@ -191,6 +202,7 @@ func main() {
 	App.Count = &Counter{}
 	App.Count.Init(App.DB)
 	App.Auth.Init(App.Config)
+	SetupConfigWatcher(logger, configReader, App)
 	App.APIEndpoints = []API{&Systemv1{}, &APIv1{}}
 	defer App.DB.Close()
 	if App.Config.Prometheus.Enabled {
