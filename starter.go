@@ -4,11 +4,14 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
+	"log"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -35,6 +38,7 @@ var (
 	)
 	logger      *slog.Logger
 	debugLogger *slog.Logger
+	logFile     *os.File
 	App         *Application
 )
 
@@ -153,16 +157,43 @@ func setupLogging(Logging ConfigLogging) {
 	default:
 		loggingLevel.Set(slog.LevelInfo)
 	}
+	if logFile != nil {
+		defer func(f io.Closer) { _ = f.Close() }(logFile)
+	}
+	output := os.Stdout
+	if Logging.File != "" {
+		var err error
+		logFile, err = os.OpenFile(Logging.File, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+		if err != nil {
+			log.Printf("Error opening log file for writing %v : %v", Logging.File, err)
+
+		} else {
+			output = logFile
+		}
+
+	}
 	switch logFormat {
 	case "json":
-		logger = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: loggingLevel}))
-		debugLogger = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: loggingLevel, AddSource: true}))
+		logger = slog.New(slog.NewJSONHandler(output, &slog.HandlerOptions{Level: loggingLevel}))
+		debugLogger = slog.New(slog.NewJSONHandler(output, &slog.HandlerOptions{Level: loggingLevel, AddSource: true}))
 	default:
-		logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: loggingLevel}))
-		debugLogger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: loggingLevel, AddSource: true}))
+		logger = slog.New(slog.NewTextHandler(output, &slog.HandlerOptions{Level: loggingLevel}))
+		debugLogger = slog.New(slog.NewTextHandler(output, &slog.HandlerOptions{Level: loggingLevel, AddSource: true}))
 	}
 	logger.Info("Logging started with options", "format", Logging.Format, "level", Logging.Level, "function", "setupLogging")
 	//slog.SetDefault(logger)
+}
+
+var rotateSig = make(chan os.Signal, 1)
+
+func logRotateHandler() {
+	for {
+		sig := <-rotateSig
+		if sig == syscall.SIGHUP {
+			logger.Info("Closing and re-opening log files for rotation: %+v", sig)
+			setupLogging(App.Config.Logging)
+		}
+	}
 }
 
 func setupTestlogging() {
@@ -178,6 +209,8 @@ func main() {
 	flag.StringVar(&test, "test", "", "Test a base64hash versus a password")
 	flag.StringVar(&configFileName, "config", "config", "Use a different config file name")
 	flag.Parse()
+	signal.Notify(rotateSig, syscall.SIGHUP)
+	go logRotateHandler()
 	App = new(Application)
 	configReader := ConfigRead(configFileName, &App.Config)
 	// Logging setup
