@@ -2,7 +2,7 @@ module github.com/SimonStiil/keyvaluedatabase
 
 go 1.21
 
-toolchain go1.22.5
+toolchain go1.23.0
 
 require (
 	github.com/fsnotify/fsnotify v1.7.0
@@ -42,7 +42,7 @@ require (
 	github.com/prometheus/common v0.53.0 // indirect
 	github.com/prometheus/procfs v0.14.0 // indirect
 	github.com/redis/go-redis/v9 v9.6.1
-	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56
+	golang.org/x/exp v0.0.0-20240808152545-0cdaa3abc0fa
 	golang.org/x/sys v0.19.0 // indirect
 	google.golang.org/protobuf v1.33.0 // indirect
 )
