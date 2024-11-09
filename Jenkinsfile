@@ -12,7 +12,7 @@ def template = '''
     spec:
       containers:
       - name: kaniko
-        image: gcr.io/kaniko-project/executor:v1.23.0-debug
+        image: gcr.io/kaniko-project/executor:v1.23.2-debug
         command:
         - sleep
         args: 
@@ -30,7 +30,7 @@ def template = '''
         - name: kaniko-secret
           mountPath: /root/.docker
       - name: golang
-        image: golang:1.23.0-alpine3.19
+        image: golang:1.23.3-alpine3.19
         command:
         - sleep
         args: 
