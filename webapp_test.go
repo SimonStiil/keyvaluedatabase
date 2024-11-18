@@ -1,6 +1,9 @@
 package main
 
 import (
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -167,6 +170,73 @@ func TestGETGreeting(t *testing.T) {
 		}
 		if string(b) != okBody {
 			t.Errorf(".Body got %q, want %q", string(b), okBody)
+		}
+	})
+	namespace = "readall"
+	t.Run("Get readall (MTLS)", func(t *testing.T) {
+		request, _ := http.NewRequest(http.MethodGet,
+			fmt.Sprintf("/%v/%v/notUsed", stub.APIPrefix(), namespace),
+			nil)
+		request.RemoteAddr = remoteAddr
+		cf, e := os.ReadFile("client.crt")
+		if e != nil {
+			t.Errorf("Error reading certificate %+v", e.Error())
+		} else {
+			cpb, _ := pem.Decode(cf)
+			crt, e := x509.ParseCertificate(cpb.Bytes)
+			t.Logf("Test certificate Common name: %v", crt.Subject.CommonName)
+			if e != nil {
+				t.Errorf("Error reading certificate %+v", e.Error())
+			} else {
+				request.TLS = &tls.ConnectionState{VerifiedChains: [][]*x509.Certificate{{crt}}}
+				response := httptest.NewRecorder()
+				App.RootControllerV1(response, request)
+
+				b, err := io.ReadAll(response.Body)
+				if err != nil {
+					t.Errorf("Error Reading body %v", err)
+				}
+				//t.Logf("Body: %v, Status: %v", string(b), response.Code)
+				if response.Code != http.StatusOK {
+					t.Errorf(".Code got %v, want %v", response.Code, http.StatusOK)
+				}
+				if string(b) != okBody {
+					t.Errorf(".Body got %q, want %q", string(b), okBody)
+				}
+			}
+		}
+	})
+	t.Run("Get readall (MTLS) fail", func(t *testing.T) {
+		request, _ := http.NewRequest(http.MethodGet,
+			fmt.Sprintf("/%v/%v/notUsed", stub.APIPrefix(), namespace),
+			nil)
+		request.RemoteAddr = remoteAddr
+		cf, e := os.ReadFile("server.crt")
+		if e != nil {
+			t.Errorf("Error reading certificate %+v", e.Error())
+		} else {
+			cpb, _ := pem.Decode(cf)
+			crt, e := x509.ParseCertificate(cpb.Bytes)
+			t.Logf("Test certificate Common name: %v", crt.Subject.CommonName)
+			if e != nil {
+				t.Errorf("Error reading certificate %+v", e.Error())
+			} else {
+				request.TLS = &tls.ConnectionState{VerifiedChains: [][]*x509.Certificate{{crt}}}
+				response := httptest.NewRecorder()
+				App.RootControllerV1(response, request)
+
+				b, err := io.ReadAll(response.Body)
+				if err != nil {
+					t.Errorf("Error Reading body %v", err)
+				}
+				//t.Logf("Body: %v, Status: %v", string(b), response.Code)
+				if response.Code != http.StatusUnauthorized {
+					t.Errorf(".Code got %v, want %v", response.Code, http.StatusUnauthorized)
+				}
+				if string(b) != UnauthorizedBody {
+					t.Errorf(".Body got %q, want %q", string(b), UnauthorizedBody)
+				}
+			}
 		}
 	})
 }

@@ -90,11 +90,18 @@ podTemplate(yaml: template) {
     }
 
     container('golang') {
+      stage('Install tools') {
+        currentBuild.description = sh(returnStdout: true, script: 'echo $HOST_NAME').trim()
+        sh '''
+            apk --update add openssl
+            go install github.com/jstemmer/go-junit-report@v1.0.0
+            ./generate-test-cert.sh
+        '''
+      }
       stage('UnitTests') {
         currentBuild.description = sh(returnStdout: true, script: 'echo $HOST_NAME').trim()
         withEnv(['CGO_ENABLED=0', 'KVDB_DATABASETYPE=mysql', "KVDB_MYSQL_PASSWORD=${testpassword}"]) {
           sh '''
-            go install github.com/jstemmer/go-junit-report@v1.0.0
             go test . -v -tags="unit integration" -covermode=atomic -coverprofile=coverage.out 2>&1 | go-junit-report -set-exit-code > report.xml
             go tool cover -func coverage.out
           '''
