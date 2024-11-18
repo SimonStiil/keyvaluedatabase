@@ -429,7 +429,7 @@ func (api *APIv1) Permissions(request *RequestParameters) *ConfigPermissions {
 	case Key:
 		switch request.Method {
 		case "GET":
-			if App.Config.PublicReadableNamespaces != nil && len(App.Config.PublicReadableNamespaces) > 0 {
+			if len(App.Config.PublicReadableNamespaces) > 0 {
 				for _, namespace := range App.Config.PublicReadableNamespaces {
 					if request.Namespace == namespace {
 						return &ConfigPermissions{}

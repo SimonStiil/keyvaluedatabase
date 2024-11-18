@@ -190,7 +190,7 @@ func logRotateHandler() {
 	for {
 		sig := <-rotateSig
 		if sig == syscall.SIGHUP {
-			logger.Info("Closing and re-opening log files for rotation: %+v", sig)
+			logger.Info(fmt.Sprintf("Closing and re-opening log files for rotation: %+v", sig))
 			setupLogging(App.Config.Logging)
 		}
 	}
