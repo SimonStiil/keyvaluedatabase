@@ -35,6 +35,17 @@ def template = '''
         - sleep
         args: 
         - 99d
+        env:
+        - name: HOST_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        volumeMounts:
+        - name: "golang-cache"
+          mountPath: "/root/.cache/"
+        - name: "golang-prgs"
+          mountPath: "/go/pkg/"
       - name: mariadb
         image: mariadb:11.3.2-jammy
         env:
@@ -56,6 +67,12 @@ def template = '''
           items:
           - key: .dockerconfigjson
             path: config.json
+      - name: "golang-cache"
+        persistentVolumeClaim:
+          claimName: "golang-cache"
+      - name: "golang-prgs"
+        persistentVolumeClaim:
+          claimName: "golang-prgs"
 '''
 template = template.replaceAll("TEMPORARY_FAKE_PASSWORD",testpassword).replaceAll("TEMPORARY_FAKE_ROOT_PASSWORD",rootpassword)
 
@@ -75,6 +92,7 @@ podTemplate(yaml: template) {
     container('golang') {
       stage('UnitTests') {
         withEnv(['CGO_ENABLED=0', 'KVDB_DATABASETYPE=mysql', "KVDB_MYSQL_PASSWORD=${testpassword}"]) {
+          currentBuild.description = sh(returnStdout: true, script: 'echo $HOST_NAME').trim()
           sh '''
             go test . -v 
           '''
@@ -138,6 +156,17 @@ podTemplate(yaml: template) {
               sh 'manifest-tool push from-args --platforms linux/amd64,linux/arm64 --template $PACKAGE_DESTINATION/$PACKAGE_NAME:$BRANCH_NAME-ARCH --target $PACKAGE_DESTINATION/$PACKAGE_NAME:$BRANCH_NAME'
             }
           }
+        }
+      }
+      if (env.CHANGE_ID) {
+        if (pullRequest.createdBy.equals("renovate[bot]")){
+          if (pullRequest.mergeable) {
+            stage('Approve and Merge PR') {
+              pullRequest.merge(commitTitle: pullRequest.title, commitMessage: pullRequest.body, mergeMethod: 'squash')
+            }
+          }
+        } else {
+          echo "'PR Created by \""+ pullRequest.createdBy + "\""
         }
       }
     }
