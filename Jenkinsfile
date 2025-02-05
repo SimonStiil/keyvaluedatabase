@@ -95,7 +95,7 @@ podTemplate(yaml: template) {
         sh '''
             apk --update add openssl
             df -h
-            go install github.com/jstemmer/go-junit-report@v1.0.0
+            go install github.com/jstemmer/go-junit-report@v2.1.0
             ./generate-test-cert.sh
         '''
       }
@@ -104,7 +104,8 @@ podTemplate(yaml: template) {
         try{
           withEnv(['CGO_ENABLED=0', 'KVDB_DATABASETYPE=mysql', "KVDB_MYSQL_PASSWORD=${testpassword}"]) {
             sh '''
-              go test . -v -tags="unit integration" -covermode=atomic -coverprofile=coverage.out 2>&1 | go-junit-report -set-exit-code > report.xml
+              go test . -v -tags="unit integration" -covermode=atomic -coverprofile=coverage.out 2>&1 | tee tests.out
+              go-junit-report -in tests.out -iocopy -out report.xml -set-exit-code
               go tool cover -func coverage.out
             '''
             
