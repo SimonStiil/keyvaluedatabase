@@ -99,7 +99,7 @@ func Test_Auth(t *testing.T) {
 		}
 	})
 	// example.com IP's based on nslookup example.com
-	ip = "93.184.215.14"
+	ip = "23.215.0.138"
 	t.Run(fmt.Sprintf("DNS for ip %s", ip), func(t *testing.T) {
 		allowed := HCT.User.HostAllowed(ip, logger)
 		if !allowed {
