@@ -101,11 +101,19 @@ podTemplate(yaml: template) {
       }
       stage('UnitTests') {
         currentBuild.description = sh(returnStdout: true, script: 'echo $HOST_NAME').trim()
-        withEnv(['CGO_ENABLED=0', 'KVDB_DATABASETYPE=mysql', "KVDB_MYSQL_PASSWORD=${testpassword}"]) {
-          sh '''
-            go test . -v -tags="unit integration" -covermode=atomic -coverprofile=coverage.out 2>&1 | go-junit-report -set-exit-code > report.xml
-            go tool cover -func coverage.out
-          '''
+        try{
+          withEnv(['CGO_ENABLED=0', 'KVDB_DATABASETYPE=mysql', "KVDB_MYSQL_PASSWORD=${testpassword}"]) {
+            sh '''
+              go test . -v -tags="unit integration" -covermode=atomic -coverprofile=coverage.out 2>&1 | go-junit-report -set-exit-code > report.xml
+              go tool cover -func coverage.out
+            '''
+            
+          }
+        } catch (Exception e) {
+          junit 'report.xml'
+          archiveArtifacts artifacts: 'report.xml', fingerprint: true
+          echo 'Exception occurred: ' + e.toString()
+          throw e
         }
         junit 'report.xml'
         archiveArtifacts artifacts: 'report.xml', fingerprint: true
