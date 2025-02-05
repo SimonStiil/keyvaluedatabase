@@ -94,6 +94,7 @@ podTemplate(yaml: template) {
         currentBuild.description = sh(returnStdout: true, script: 'echo $HOST_NAME').trim()
         sh '''
             apk --update add openssl
+            df -h
             go install github.com/jstemmer/go-junit-report@v1.0.0
             ./generate-test-cert.sh
         '''
