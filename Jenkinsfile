@@ -93,9 +93,9 @@ podTemplate(yaml: template) {
       stage('Install tools') {
         currentBuild.description = sh(returnStdout: true, script: 'echo $HOST_NAME').trim()
         sh '''
-            apk --update add openssl
+            apk --update add openssl git
             df -h
-            go install github.com/jstemmer/go-junit-report@v2.1.0
+            go install github.com/jstemmer/go-junit-report/v2@v2.1.0
             ./generate-test-cert.sh
         '''
       }
@@ -122,14 +122,14 @@ podTemplate(yaml: template) {
       stage('Build Application AMD64') {
         withEnv(['CGO_ENABLED=0', 'GOOS=linux', 'GOARCH=amd64', "PACKAGE_CONTAINER_APPLICATION=${properties.PACKAGE_CONTAINER_APPLICATION}"]) {
           sh '''
-            go build -ldflags="-w -s" -o $PACKAGE_CONTAINER_APPLICATION-amd64 .
+            go build -buildvcs=false -ldflags="-w -s" -o $PACKAGE_CONTAINER_APPLICATION-amd64 .
           '''
         }
       }
       stage('Build Application ARM64') {
         withEnv(['CGO_ENABLED=0', 'GOOS=linux', 'GOARCH=arm64', "PACKAGE_CONTAINER_APPLICATION=${properties.PACKAGE_CONTAINER_APPLICATION}"]) {
           sh '''
-            go build -ldflags="-w -s" -o $PACKAGE_CONTAINER_APPLICATION-arm64 .
+            go build -buildvcs=false -ldflags="-w -s" -o $PACKAGE_CONTAINER_APPLICATION-arm64 .
           '''
         }
       }
