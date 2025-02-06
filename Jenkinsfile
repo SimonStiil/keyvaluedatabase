@@ -94,7 +94,7 @@ podTemplate(yaml: template) {
         currentBuild.description = sh(returnStdout: true, script: 'echo $HOST_NAME').trim()
         sh '''
             apk --update add openssl git
-            df -h
+            df -h /root/.cache /go/pkg
             go install github.com/jstemmer/go-junit-report/v2@v2.1.0
             ./generate-test-cert.sh
         '''
@@ -104,13 +104,14 @@ podTemplate(yaml: template) {
         try{
           withEnv(['CGO_ENABLED=0', 'KVDB_DATABASETYPE=mysql', "KVDB_MYSQL_PASSWORD=${testpassword}"]) {
             sh '''
-              go test . -v -tags="unit integration" -covermode=atomic -coverprofile=coverage.out 2>&1 | tee tests.out
+              go test . -v -tags="unit integration" -covermode=atomic -coverprofile=coverage.out 2>&1 > tests.out
               go-junit-report -in tests.out -iocopy -out report.xml -set-exit-code
               go tool cover -func coverage.out
             '''
             
           }
         } catch (Exception e) {
+          cat tests.out
           junit 'report.xml'
           archiveArtifacts artifacts: 'report.xml', fingerprint: true
           echo 'Exception occurred: ' + e.toString()
