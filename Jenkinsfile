@@ -93,18 +93,29 @@ podTemplate(yaml: template) {
       stage('Install tools') {
         currentBuild.description = sh(returnStdout: true, script: 'echo $HOST_NAME').trim()
         sh '''
-            apk --update add openssl
-            go install github.com/jstemmer/go-junit-report@v1.0.0
+            apk --update add openssl git
+            df -h /root/.cache /go/pkg
+            go install github.com/jstemmer/go-junit-report/v2@v2.1.0
             ./generate-test-cert.sh
         '''
       }
       stage('UnitTests') {
         currentBuild.description = sh(returnStdout: true, script: 'echo $HOST_NAME').trim()
-        withEnv(['CGO_ENABLED=0', 'KVDB_DATABASETYPE=mysql', "KVDB_MYSQL_PASSWORD=${testpassword}"]) {
-          sh '''
-            go test . -v -tags="unit integration" -covermode=atomic -coverprofile=coverage.out 2>&1 | go-junit-report -set-exit-code > report.xml
-            go tool cover -func coverage.out
-          '''
+        try{
+          withEnv(['CGO_ENABLED=0', 'KVDB_DATABASETYPE=mysql', "KVDB_MYSQL_PASSWORD=${testpassword}"]) {
+            sh '''
+              go test . -v -tags="unit integration" -covermode=atomic -coverprofile=coverage.out 2>&1 > tests.out
+              go-junit-report -in tests.out -iocopy -out report.xml -set-exit-code
+              go tool cover -func coverage.out
+            '''
+            
+          }
+        } catch (Exception e) {
+          cat tests.out
+          junit 'report.xml'
+          archiveArtifacts artifacts: 'report.xml', fingerprint: true
+          echo 'Exception occurred: ' + e.toString()
+          throw e
         }
         junit 'report.xml'
         archiveArtifacts artifacts: 'report.xml', fingerprint: true
@@ -112,14 +123,14 @@ podTemplate(yaml: template) {
       stage('Build Application AMD64') {
         withEnv(['CGO_ENABLED=0', 'GOOS=linux', 'GOARCH=amd64', "PACKAGE_CONTAINER_APPLICATION=${properties.PACKAGE_CONTAINER_APPLICATION}"]) {
           sh '''
-            go build -ldflags="-w -s" -o $PACKAGE_CONTAINER_APPLICATION-amd64 .
+            go build -buildvcs=false -ldflags="-w -s" -o $PACKAGE_CONTAINER_APPLICATION-amd64 .
           '''
         }
       }
       stage('Build Application ARM64') {
         withEnv(['CGO_ENABLED=0', 'GOOS=linux', 'GOARCH=arm64', "PACKAGE_CONTAINER_APPLICATION=${properties.PACKAGE_CONTAINER_APPLICATION}"]) {
           sh '''
-            go build -ldflags="-w -s" -o $PACKAGE_CONTAINER_APPLICATION-arm64 .
+            go build -buildvcs=false -ldflags="-w -s" -o $PACKAGE_CONTAINER_APPLICATION-arm64 .
           '''
         }
       }
