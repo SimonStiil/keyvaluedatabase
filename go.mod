@@ -6,7 +6,7 @@ toolchain go1.24.0
 
 require (
 	github.com/fsnotify/fsnotify v1.8.0
-	github.com/go-sql-driver/mysql v1.8.1
+	github.com/go-sql-driver/mysql v1.9.0
 	github.com/netinternet/remoteaddr v0.0.0-20211208125013-432b11cac01e
 	github.com/prometheus/client_golang v1.20.5
 	github.com/spf13/viper v1.19.0
