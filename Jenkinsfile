@@ -21,7 +21,7 @@ def template = '''
         - name: kaniko-secret
           mountPath: /kaniko/.docker
       - name: manifest-tool
-        image: mplatform/manifest-tool:alpine-v2.1.6 # renovate
+        image: mplatform/manifest-tool:alpine-v2.2.0 # renovate
         command:
         - sleep
         args: 
