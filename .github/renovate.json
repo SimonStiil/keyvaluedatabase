@@ -34,7 +34,7 @@
         "(^|/)Jenkinsfile$"
       ],
       "matchStrings": [
-        "\\simage: (?<depName>.*?):(?<currentValue>.*?)\\s"
+        "^\\s*image: (?<depName>.*?):(?<currentValue>.*?)\\s*$"
       ],
       "datasourceTemplate": "docker",
       "versioningTemplate": "docker"
