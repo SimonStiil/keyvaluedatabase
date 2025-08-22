@@ -24,20 +24,25 @@
       "matchPackageNames": [
         "*"
       ]
+    },
+    {
+      "matchDatasources": ["docker"],
+      "matchPackageNames": [
+        "mplatform/manifest-tool"
+      ],
+      "versioning": "regex:^((?<compatibility>.*)-)?v?(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)(?<prerelease>[^.-]+)?$"
     }
   ],
   "separateMajorMinor": false,
-  "customManagers": [
+  "regexManagers": [
     {
-      "customType": "regex",
       "fileMatch": [
         "(^|/)Jenkinsfile$"
       ],
       "matchStrings": [
-        "^\\s*image: (?<depName>.*?):(?<currentValue>.*?)\\s*$"
+        "\\s*image:\\s*(?<depName>.*?):(?<currentValue>.*?)\\s*#\\s*renovate\\n"
       ],
-      "datasourceTemplate": "docker",
-      "versioningTemplate": "docker"
+      "datasourceTemplate": "docker"
     }
   ]
 }
