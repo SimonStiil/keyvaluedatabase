@@ -21,7 +21,7 @@ def template = '''
         - name: kaniko-secret
           mountPath: /kaniko/.docker
       - name: manifest-tool
-        image: mplatform/manifest-tool:alpine-v2.1.6 # renovate
+        image: mplatform/manifest-tool:alpine-v2.2.0 # renovate
         command:
         - sleep
         args: 
@@ -30,7 +30,7 @@ def template = '''
         - name: kaniko-secret
           mountPath: /root/.docker
       - name: golang
-        image: golang:1.23.4-alpine3.19 # renovate
+        image: golang:1.25.0-alpine3.22 # renovate
         command:
         - sleep
         args: 
@@ -111,7 +111,8 @@ podTemplate(yaml: template) {
             
           }
         } catch (Exception e) {
-          cat tests.out
+          def fileContent = readFile('tests.out')
+          echo fileContent
           junit 'report.xml'
           archiveArtifacts artifacts: 'report.xml', fingerprint: true
           echo 'Exception occurred: ' + e.toString()
