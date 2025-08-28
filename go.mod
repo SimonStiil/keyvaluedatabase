@@ -1,6 +1,6 @@
 module github.com/SimonStiil/keyvaluedatabase
 
-go 1.23.0
+go 1.24.0
 
 toolchain go1.25.0
 
@@ -45,7 +45,7 @@ require (
 	github.com/prometheus/common v0.65.0 // indirect
 	github.com/prometheus/procfs v0.16.1 // indirect
 	github.com/redis/go-redis/v9 v9.12.1
-	golang.org/x/exp v0.0.0-20250811191247-51f88131bc50
+	golang.org/x/exp v0.0.0-20250819193227-8b4c13bb791b
 	golang.org/x/sys v0.33.0 // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
 )
