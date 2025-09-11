@@ -30,7 +30,7 @@ def template = '''
         - name: kaniko-secret
           mountPath: /root/.docker
       - name: golang
-        image: golang:1.25.0-alpine3.22 # renovate
+        image: golang:1.25.1-alpine3.22 # renovate
         command:
         - sleep
         args: 
