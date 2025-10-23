@@ -47,7 +47,7 @@ require (
 	github.com/prometheus/common v0.66.1 // indirect
 	github.com/prometheus/procfs v0.16.1 // indirect
 	github.com/redis/go-redis/v9 v9.16.0
-	golang.org/x/exp v0.0.0-20251017212417-90e834f514db
+	golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546
 	golang.org/x/sys v0.35.0 // indirect
 	google.golang.org/protobuf v1.36.8 // indirect
 )
