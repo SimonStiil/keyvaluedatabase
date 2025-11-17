@@ -52,6 +52,7 @@ type ConfigType struct {
 	PublicReadableNamespaces []string         `mapstructure:"publicReadableNamespaces"`
 	Redis                    ConfigRedis      `mapstructure:"redis"`
 	Mysql                    ConfigMysql      `mapstructure:"mysql"`
+	Postgres                 ConfigPostgres   `mapstructure:"postgres"`
 	Prometheus               ConfigPrometheus `mapstructure:"prometheus"`
 }
 type ConfigLogging struct {
@@ -110,6 +111,7 @@ func ConfigRead(configFileName string, configOutput *ConfigType) *viper.Viper {
 	configReader.SetEnvPrefix(BaseENVname)
 	MariaDBGetDefaults(configReader)
 	RedisDBGetDefaults(configReader)
+	PostgresGetDefaults(configReader)
 	configReader.SetDefault("logging.level", "Debug")
 	configReader.SetDefault("logging.format", "text")
 	configReader.SetDefault("port", 8080)
@@ -226,6 +228,10 @@ func main() {
 	case "mysql":
 		logger.Info("Using Maria DB", "function", "main")
 		App.DB = &MariaDatabase{Config: &App.Config.Mysql}
+		App.DB.Init()
+	case "postgres":
+		logger.Info("Using Postgres DB", "function", "main")
+		App.DB = &PostgresDatabase{Config: &App.Config.Postgres}
 		App.DB.Init()
 	case "yaml":
 		logger.Info("Using Yaml DB (no Redis or Mysql configuration)", "function", "main")
