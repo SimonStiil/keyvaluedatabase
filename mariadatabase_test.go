@@ -13,10 +13,6 @@ func Test_Maria_DB(t *testing.T) {
 	dbt := new(MariaDBTest)
 	setupTestlogging()
 	ConfigRead("example-config", &dbt.Config)
-	if dbt.Config.DatabaseType != "mysql" {
-		t.Log("no MySQL configuration in test config. Skipping test")
-		return
-	}
 	dbt.Config.Mysql.DatabaseName = "kvdb-test"
 	dbt.DB = &MariaDatabase{
 		Config: &dbt.Config.Mysql,
