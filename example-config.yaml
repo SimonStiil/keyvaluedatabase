@@ -43,8 +43,14 @@ mysql:
   address: "127.0.0.1:3306"
   # username: "kvdb"
   # databaseName: "kvdb"
-  # tableName: "kvdb"
+  # systemTableName: "kvdb"
   # envVariableName: # Set if different from KVDB_MYSQL_PASSWORD
+postgres:
+  address: "127.0.0.1:5432"  # Or your Kubernetes service address
+  # username: "kvdb"
+  # databaseName: "kvdb"
+  # systemTableName: "kvdb"
+  # envVariableName: # Set if different from KVDB_POSTGRES_PASSWORD
 prometheus:
   enabled: true # enable /system/metrics prometheus endpoint (for all users and hosts)
   # endpoint: # Set if different from metrics

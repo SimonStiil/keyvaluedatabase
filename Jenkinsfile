@@ -51,6 +51,25 @@ def template = '''
             value: "TEMPORARY_FAKE_ROOT_PASSWORD"
         ports:
           - containerPort: 3306
+      - name: postgres
+        image: postgres:18.1-alpine
+        env:
+          - name: POSTGRES_USER
+            value: "kvdb"
+          - name: POSTGRES_PASSWORD
+            value: "TEMPORARY_FAKE_PASSWORD"
+          - name: POSTGRES_DB
+            value: "kvdb-test"
+        ports:
+          - containerPort: 5432
+      - name: redis
+        image: redis:8.2.3
+        command:
+          - redis-server
+          - --requirepass
+          - TEMPORARY_FAKE_PASSWORD
+        ports:
+          - containerPort: 6379
       restartPolicy: Never
       volumes:
       - name: docker-secret
@@ -97,7 +116,7 @@ podTemplate(yaml: template) {
       stage('UnitTests') {
         currentBuild.description = sh(returnStdout: true, script: 'echo $HOST_NAME').trim()
         try{
-          withEnv(['CGO_ENABLED=0', 'KVDB_DATABASETYPE=mysql', "KVDB_MYSQL_PASSWORD=${testpassword}"]) {
+          withEnv(['CGO_ENABLED=0', 'KVDB_DATABASETYPE=postgres', "KVDB_MYSQL_PASSWORD=${testpassword}", "KVDB_POSTGRES_PASSWORD=${testpassword}", "KVDB_REDIS_PASSWORD=${testpassword}"]) {
             sh '''
               go test . -v -tags="unit integration" -covermode=atomic -coverprofile=coverage.out 2>&1 > tests.out
               go-junit-report -in tests.out -iocopy -out report.xml -set-exit-code
