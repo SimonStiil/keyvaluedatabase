@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"testing"
 )
 
@@ -99,8 +100,18 @@ func Test_Auth(t *testing.T) {
 		}
 	})
 	// example.com IP's based on nslookup example.com
-	ip = "23.215.0.138"
+	ip = "example.com"
 	t.Run(fmt.Sprintf("DNS for ip %s", ip), func(t *testing.T) {
+		ips, err := net.LookupIP(ip)
+		if err != nil {
+			t.Errorf("failed to resolve ip err: %+v", err)
+		}
+		for _, cip := range ips {
+			if cip.To4() != nil {
+				ip = cip.String()
+				break
+			}
+		}
 		allowed := HCT.User.HostAllowed(ip, logger)
 		if !allowed {
 			t.Errorf("failed for host %v", ip)
