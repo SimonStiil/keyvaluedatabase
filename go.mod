@@ -2,7 +2,7 @@ module github.com/SimonStiil/keyvaluedatabase
 
 go 1.24.0
 
-toolchain go1.25.6
+toolchain go1.25.7
 
 require (
 	github.com/fsnotify/fsnotify v1.9.0
