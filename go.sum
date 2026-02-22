@@ -58,6 +58,8 @@ github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 h1:C3w9PqII01/Oq
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8mK8HuQTcFwEeznm/DIxMOiR9yIdICNftLE1DvQ=
 github.com/netinternet/remoteaddr v0.0.0-20211208125013-432b11cac01e h1:beWu/q2J96kRKMX+41ZfaGG//XBWZOqvTWbLZ0z1dvM=
 github.com/netinternet/remoteaddr v0.0.0-20211208125013-432b11cac01e/go.mod h1:6YZo/43r0mXTh1uZnH2newA1akhAjH3hF1GG7ZDg8pw=
+github.com/netinternet/remoteaddr v0.0.2 h1:TLAaOs0KRKdvfS6PScYzeMMISc2DqP8ZaPNsd003Z7c=
+github.com/netinternet/remoteaddr v0.0.2/go.mod h1:6YZo/43r0mXTh1uZnH2newA1akhAjH3hF1GG7ZDg8pw=
 github.com/pelletier/go-toml/v2 v2.1.1 h1:LWAJwfNvjQZCFIDKWYQaM62NcYeYViCmWIwmOStowAI=
 github.com/pelletier/go-toml/v2 v2.1.1/go.mod h1:tJU2Z3ZkXwnxa4DPO899bsyIoywizdUvyaeZurnPPDc=
 github.com/pelletier/go-toml/v2 v2.2.1 h1:9TA9+T8+8CUCO2+WYnDLCgrYi9+omqKXyjDtosvtEhg=
