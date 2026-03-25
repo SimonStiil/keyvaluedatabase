@@ -2,12 +2,12 @@ module github.com/SimonStiil/keyvaluedatabase
 
 go 1.25.0
 
-toolchain go1.26.0
+toolchain go1.26.1
 
 require (
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/go-sql-driver/mysql v1.9.3
-	github.com/lib/pq v1.11.2
+	github.com/lib/pq v1.12.0
 	github.com/netinternet/remoteaddr v0.0.2
 	github.com/prometheus/client_golang v1.23.2
 	github.com/spf13/viper v1.21.0
@@ -48,7 +48,7 @@ require (
 	github.com/prometheus/common v0.66.1 // indirect
 	github.com/prometheus/procfs v0.16.1 // indirect
 	github.com/redis/go-redis/v9 v9.18.0
-	golang.org/x/exp v0.0.0-20260218203240-3dfff04db8fa
+	golang.org/x/exp v0.0.0-20260312153236-7ab1446f8b90
 	golang.org/x/sys v0.35.0 // indirect
 	google.golang.org/protobuf v1.36.8 // indirect
 )
