@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -12,7 +11,6 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/prometheus/client_golang/prometheus"
@@ -47,7 +45,7 @@ type ConfigType struct {
 	Port                     string           `mapstructure:"port"`
 	DatabaseType             string           `mapstructure:"databaseType"`
 	Users                    []ConfigUser     `mapstructure:"users"`
-	MTLS                     MTLSConfig       `mapstructure:"mtls"`
+	OIDC                     ConfigOIDC       `mapstructure:"oidc"`
 	TrustedProxies           []string         `mapstructure:"trustedProxies"`
 	PublicReadableNamespaces []string         `mapstructure:"publicReadableNamespaces"`
 	Redis                    ConfigRedis      `mapstructure:"redis"`
@@ -88,14 +86,18 @@ type ConfigPrometheus struct {
 	Endpoint string `mapstructure:"endpoint"`
 }
 
-type MTLSConfig struct {
-	Enabled       bool              `mapstructure:"enabled"`
-	Port          string            `mapstructure:"port"`
-	Certificate   string            `mapstructure:"certificate"`
-	CACertificate string            `mapstructure:"caCertificate"`
-	Key           string            `mapstructure:"key"`
-	ExternalMTLS  bool              `mapstructure:"externalMTLS"`
-	Permissions   ConfigPermissions `mapstructure:"permissions"`
+type ConfigOIDC struct {
+	Enabled          bool     `mapstructure:"enabled"`
+	ProviderURL      string   `mapstructure:"providerURL"`
+	ClientID         string   `mapstructure:"clientID"`
+	ClientSecret     string   `mapstructure:"clientSecret"`
+	EnvVariableName  string   `mapstructure:"envVariableName"`
+	RedirectURL      string   `mapstructure:"redirectURL"`
+	Scopes           []string `mapstructure:"scopes"`
+	TokenTTL         int      `mapstructure:"tokenTTL"`
+	DisableBasicAuth bool     `mapstructure:"disableBasicAuth"`
+	CookieName       string   `mapstructure:"cookieName"`
+	CookieDomain     string   `mapstructure:"cookieDomain"`
 }
 
 const (
@@ -118,15 +120,13 @@ func ConfigRead(configFileName string, configOutput *ConfigType) *viper.Viper {
 	configReader.SetDefault("databaseType", "yaml")
 	configReader.SetDefault("prometheus.enabled", true)
 	configReader.SetDefault("prometheus.endpoint", "/system/metrics")
-	configReader.SetDefault("mtls.enabled", false)
-	configReader.SetDefault("mtls.port", 8443)
-	configReader.SetDefault("mtls.certificate", "server.crt")
-	configReader.SetDefault("mtls.key", "server.key")
-	configReader.SetDefault("mtls.caCertificate", "ca.crt")
-	configReader.SetDefault("mtls.externalMTLS", false)
-	configReader.SetDefault("mtls.permissions.read", true)
-	configReader.SetDefault("mtls.permissions.write", false)
-	configReader.SetDefault("mtls.permissions.list", true)
+	configReader.SetDefault("oidc.enabled", false)
+	configReader.SetDefault("oidc.providerURL", "http://127.0.0.1:9096/.well-known/openid-configuration")
+	configReader.SetDefault("oidc.redirectURL", "http://127.0.0.1:8080/oidc/callback")
+	configReader.SetDefault("oidc.scopes", []string{"openid", "profile", "email"})
+	configReader.SetDefault("oidc.tokenTTL", 60)
+	configReader.SetDefault("oidc.disableBasicAuth", false)
+	configReader.SetDefault("oidc.cookieName", "kvdb_oidc_session")
 
 	err := configReader.ReadInConfig() // Find and read the config file
 	if err != nil {                    // Handle errors reading the config file
@@ -251,28 +251,11 @@ func main() {
 	regularServerMux := http.NewServeMux()
 	regularServerMux.HandleFunc("/", http.HandlerFunc(App.RootControllerV1))
 
-	logger.Info("users does not contain any entries, password auth disabled", "function", "main")
-	if App.Config.MTLS.Enabled {
-		mtlsServerMux := http.NewServeMux()
-		mtlsServerMux.HandleFunc("/", http.HandlerFunc(App.RootControllerV1))
-		go App.ServeHTTP(regularServerMux)
-		go App.ServeHTTPMTLS(mtlsServerMux)
-		sigInterruptChannel := make(chan os.Signal, 1)
-		signal.Notify(sigInterruptChannel, os.Interrupt)
-		// block execution from continuing further until SIGINT comes
-		<-sigInterruptChannel
-
-		// create a context which will expire after 4 seconds of grace period
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*4)
-		defer cancel()
-
-		// ask to shutdown for both servers
-		go App.HTTPServer.Shutdown(ctx)
-		go App.MTLSServer.Shutdown(ctx)
-
-		// wait until ctx ends (which will happen after 4 seconds)
-		<-ctx.Done()
-	} else {
-		App.ServeHTTP(regularServerMux)
+	if App.Config.OIDC.Enabled {
+		logger.Info("OIDC enabled, registering OIDC endpoints", "function", "main")
+		regularServerMux.HandleFunc("/oidc/login", http.HandlerFunc(App.Auth.OIDCLogin))
+		regularServerMux.HandleFunc("/oidc/callback", http.HandlerFunc(App.Auth.OIDCCallback))
+		regularServerMux.HandleFunc("/oidc/logout", http.HandlerFunc(App.Auth.OIDCLogout))
 	}
+	App.ServeHTTP(regularServerMux)
 }

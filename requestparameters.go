@@ -35,18 +35,18 @@ type RequestParameters struct {
 type Verified struct {
 	Password bool
 	Host     bool
-	mTLS     bool
+	OIDC     bool
 }
 
 func (Verified *Verified) Ok() bool {
-	if Verified.mTLS {
+	if Verified.OIDC {
 		return true
 	}
 	return Verified.Password && Verified.Host
 }
 
 func (RequestParameters *RequestParameters) GetUserName() string {
-	if RequestParameters.Basic.Ok || RequestParameters.Authentication.Verified.mTLS {
+	if RequestParameters.Basic.Ok || RequestParameters.Authentication.Verified.OIDC {
 		return RequestParameters.Basic.Username
 	}
 	return "anonymous"
@@ -65,14 +65,7 @@ func GetRequestParameters(r *http.Request, id uint32) *RequestParameters {
 	if len(slashSeperated) > 2 {
 		req.Key = slashSeperated[2]
 	}
-	if r.TLS != nil && len(r.TLS.VerifiedChains) > 0 && len(r.TLS.VerifiedChains[0]) > 0 {
-		req.Basic.Username = r.TLS.VerifiedChains[0][0].Subject.CommonName
-		req.Basic.Password = ""
-		req.Basic.Ok = true
-		req.Authentication.Verified.mTLS = true
-	} else {
-		req.Basic.Username, req.Basic.Password, req.Basic.Ok = r.BasicAuth()
-	}
+	req.Basic.Username, req.Basic.Password, req.Basic.Ok = r.BasicAuth()
 	req.Logger.Ext = debugLogger.With("id", id, "method", r.Method, "path", r.URL.EscapedPath(), "api", req.Api, "namespace", req.Namespace, "key", req.Key, "basic.user", req.Basic.Username)
 	req.Logger.Log = logger.With("id", id, "method", r.Method, "path", r.URL.EscapedPath())
 	return req

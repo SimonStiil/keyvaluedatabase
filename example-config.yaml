@@ -55,14 +55,18 @@ prometheus:
   enabled: true # enable /system/metrics prometheus endpoint (for all users and hosts)
   # endpoint: # Set if different from metrics
 
-# mtls:
-  # enabled: false # Enable mTLS port
-  # port: 8443 # Port to use for mTLS
-  # certificate: server.crt # Server certificate
-  # key: server.key # Server Certificate key 
-  # caCertificate: ca.crt # Server certificate chain
-  # externalMTLS: false # Do not use internal certificate signing but expect external proxy
-  # permissions: # permissions for mtls port
-    # read: true
-    # write: false
-    # list: true
+# oidc:
+  # enabled: false # Enable OIDC authentication
+  # providerURL: http://127.0.0.1:9096/.well-known/openid-configuration # OIDC discovery URL
+  # clientID: kvdb # OAuth2 client ID registered with provider
+  # clientSecret: secret # OAuth2 client secret
+  # envVariableName: # Set if different from KVDB_OIDC_CLIENTSECRET
+  # redirectURL: http://127.0.0.1:8080/oidc/callback # Redirect URL after OIDC login
+  # scopes: # OIDC scopes
+    # - openid
+    # - profile
+    # - email
+  # tokenTTL: 60 # Session token TTL in minutes
+  # disableBasicAuth: false # Disable basic auth when OIDC is enabled
+  # cookieName: kvdb_oidc_session # Cookie name for OIDC session JWT
+  # cookieDomain: # Optional cookie domain

@@ -8,16 +8,19 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"net/http"
 	"os"
+	"time"
 
 	"github.com/netinternet/remoteaddr"
 )
 
 type Auth struct {
-	Users       map[string]User
-	Config      ConfigType
-	HostHeaders []string
-	Permissions struct {
+	Users        map[string]User
+	Config       ConfigType
+	HostHeaders  []string
+	OIDCProvider *OIDCProvider
+	Permissions  struct {
 		ListFull *ConfigPermissions
 		List     *ConfigPermissions
 	}
@@ -28,26 +31,94 @@ var AnonymounsUser User
 // https://www.alexedwards.net/blog/basic-authentication-in-go
 // https://medium.com/@matryer/the-http-handler-wrapper-technique-in-golang-updated-bc7fbcffa702
 func (Auth *Auth) Authentication(request *RequestParameters) bool {
-	user, ok := Auth.Users[request.Basic.Username]
-	debugLogger := request.Logger.Ext.With("function", "Authentication")
-	debugLogger.Debug(fmt.Sprintf("User in database : %v", ok), "found", ok)
-	if ok {
-		request.Authentication.User = &user
-		if request.Basic.Ok {
-			passwordHash := AuthHash(request.Basic.Password)
-			if AuthTest(passwordHash, user.PasswordEnc) {
-				request.Authentication.Verified.Password = true
+	// Try OIDC authentication first if enabled
+	if Auth.OIDCProvider != nil {
+		tokenString, err := ExtractSessionCookie(request.orgRequest, Auth.Config.OIDC.CookieName)
+		if err == nil && tokenString != "" {
+			token, err := Auth.OIDCProvider.VerifyJWT(tokenString)
+			if err == nil {
+				session, err := GetSessionFromToken(token)
+				if err == nil {
+					request.Authentication.Verified.OIDC = true
+					request.Basic.Username = session.Username
+					request.Basic.Ok = true
+
+					// Create a temporary user from OIDC claims
+					oidcUser := User{
+						GlobalPermissions: ConfigPermissions{Read: true, Write: true, List: true},
+					}
+					request.Authentication.User = &oidcUser
+					return true
+				}
 			}
-			if user.HostAllowed(request.RequestIP, request.Logger.Ext) {
-				request.Authentication.Verified.Host = true
-			}
-			if request.Authentication.Verified.Password && request.Authentication.Verified.Host {
-				return true
-			}
-			return request.Authentication.Verified.Ok()
 		}
 	}
+
+	// Fall back to Basic auth if OIDC failed or Basic auth not disabled
+	if !Auth.Config.OIDC.DisableBasicAuth {
+		user, ok := Auth.Users[request.Basic.Username]
+		debugLogger := request.Logger.Ext.With("function", "Authentication")
+		debugLogger.Debug(fmt.Sprintf("User in database : %v", ok), "found", ok)
+		if ok {
+			request.Authentication.User = &user
+			if request.Basic.Ok {
+				passwordHash := AuthHash(request.Basic.Password)
+				if AuthTest(passwordHash, user.PasswordEnc) {
+					request.Authentication.Verified.Password = true
+				}
+				if user.HostAllowed(request.RequestIP, request.Logger.Ext) {
+					request.Authentication.Verified.Host = true
+				}
+				if request.Authentication.Verified.Password && request.Authentication.Verified.Host {
+					return true
+				}
+				return request.Authentication.Verified.Ok()
+			}
+		}
+	} else if Auth.Config.OIDC.Enabled {
+		debugLogger := request.Logger.Ext.With("function", "Authentication")
+		debugLogger.Debug("Basic auth disabled, OIDC required", "disableBasicAuth", Auth.Config.OIDC.DisableBasicAuth)
+	}
+
 	return false
+}
+
+func (Auth *Auth) OIDCLogin(w http.ResponseWriter, r *http.Request) {
+	debugLogger := debugLogger.With("function", "OIDCLogin")
+	debugLogger.Debug("OIDC login requested")
+
+	if Auth.OIDCProvider == nil {
+		http.Error(w, "OIDC not configured", http.StatusNotFound)
+		return
+	}
+
+	Auth.OIDCProvider.OIDCLogin(w, r)
+}
+
+func (Auth *Auth) OIDCCallback(w http.ResponseWriter, r *http.Request) {
+	debugLogger := debugLogger.With("function", "OIDCCallback")
+	debugLogger.Debug("OIDC callback received")
+
+	if Auth.OIDCProvider == nil {
+		http.Error(w, "OIDC not configured", http.StatusNotFound)
+		return
+	}
+
+	Auth.OIDCProvider.OIDCCallback(w, r)
+}
+
+func (Auth *Auth) OIDCLogout(w http.ResponseWriter, r *http.Request) {
+	debugLogger := debugLogger.With("function", "OIDCLogout")
+	debugLogger.Debug("OIDC logout requested")
+
+	if Auth.OIDCProvider == nil {
+		// Still clear cookie if provider not initialized
+		ClearSessionCookie(w, Auth.Config.OIDC.CookieName)
+		http.Redirect(w, r, "/", http.StatusFound)
+		return
+	}
+
+	Auth.OIDCProvider.OIDCLogout(w, r)
 }
 func (Auth *Auth) NoAuth(permissions *ConfigPermissions) bool {
 	return !permissions.List && !permissions.Read && !permissions.Write
@@ -158,6 +229,25 @@ func (Auth *Auth) Init(config ConfigType) {
 		"Proxy-Client-IP",
 		"WL-Proxy-Client-IP",
 		"REMOTE_ADDR"}
+
+	// Initialize OIDC provider if enabled
+	if config.OIDC.Enabled {
+		initOIDCClientSecret(&config.OIDC, BaseENVname)
+		provider, err := InitOIDCProvider(config.OIDC)
+		if err != nil {
+			logger.Error("Failed to initialize OIDC provider", "error", err)
+		} else {
+			Auth.OIDCProvider = provider
+			// Start periodic cleanup of expired sessions
+			go func() {
+				ticker := time.NewTicker(15 * time.Minute)
+				defer ticker.Stop()
+				for range ticker.C {
+					provider.CleanupExpiredSessions()
+				}
+			}()
+		}
+	}
 }
 
 func (Auth *Auth) LoadConfig(config ConfigType) {

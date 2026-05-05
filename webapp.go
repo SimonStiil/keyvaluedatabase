@@ -2,15 +2,11 @@ package main
 
 import (
 	"bytes"
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
-	"os"
 	"reflect"
 	"runtime"
 	"strings"
@@ -25,7 +21,6 @@ type Application struct {
 	Count        *Counter
 	DB           Database
 	HTTPServer   *http.Server
-	MTLSServer   *http.Server
 	APIEndpoints []API
 }
 
@@ -179,53 +174,4 @@ func (App *Application) ServeHTTP(mux *http.ServeMux) {
 	}
 	logger.Info(fmt.Sprintf("Serving on port %v", App.Config.Port))
 	log.Fatal(App.HTTPServer.ListenAndServe())
-}
-func checkFileExists(filePath string) bool {
-	_, error := os.Stat(filePath)
-	return !errors.Is(error, os.ErrNotExist)
-}
-
-func (App *Application) ServeHTTPMTLS(mux *http.ServeMux) {
-	missingFile := false
-	if App.Config.MTLS.ExternalMTLS {
-		App.MTLSServer = &http.Server{
-			Addr:    ":" + App.Config.MTLS.Port,
-			Handler: mux,
-		}
-		logger.Info(fmt.Sprintf("Serving MTLS on port %v", App.Config.MTLS.Port))
-		log.Fatal(App.MTLSServer.ListenAndServe())
-	} else {
-		if !checkFileExists(App.Config.MTLS.CACertificate) {
-			logger.Error(fmt.Sprintf("External MTLS not Enabled but no CACertificate exists: %v", App.Config.MTLS.CACertificate))
-
-			missingFile = true
-		}
-		if !checkFileExists(App.Config.MTLS.Certificate) {
-			logger.Error(fmt.Sprintf("External MTLS not Enabled but no Certificate exists: %v", App.Config.MTLS.Certificate))
-			missingFile = true
-		}
-		if !checkFileExists(App.Config.MTLS.Key) {
-			logger.Error(fmt.Sprintf("External MTLS not Enabled but no Key exists: %v", App.Config.MTLS.Key))
-			missingFile = true
-		}
-		if !missingFile {
-			caCert, err := os.ReadFile(App.Config.MTLS.CACertificate)
-			if err != nil {
-				log.Fatal(err)
-			}
-			caCertPool := x509.NewCertPool()
-			caCertPool.AppendCertsFromPEM(caCert)
-			tlsConfig := &tls.Config{
-				ClientCAs:  caCertPool,
-				ClientAuth: tls.RequireAndVerifyClientCert,
-			}
-			App.MTLSServer = &http.Server{
-				Addr:      ":" + App.Config.MTLS.Port,
-				TLSConfig: tlsConfig,
-				Handler:   mux,
-			}
-			logger.Info(fmt.Sprintf("Serving MTLS on port %v", App.Config.MTLS.Port))
-			log.Fatal(App.MTLSServer.ListenAndServeTLS(App.Config.MTLS.Certificate, App.Config.MTLS.Key))
-		}
-	}
 }
