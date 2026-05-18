@@ -1,0 +1,109 @@
+server:
+  address: 'tcp://0.0.0.0:9091/'
+
+log:
+  level: debug
+
+authentication_backend:
+  file:
+    path: /config/users_database.yml
+
+access_control:
+  default_policy: bypass
+
+session:
+  secret: 'test_session_secret_for_testing_only_not_for_production_use'
+  cookies:
+    - name: authelia_session
+      domain: localhost
+      authelia_url: 'http://127.0.0.1:19091'
+      expiration: 1h
+      inactivity: 5m
+
+storage:
+  encryption_key: 'test_storage_encryption_key_32c'
+  local:
+    path: /tmp/db.sqlite3
+
+notifier:
+  filesystem:
+    filename: /tmp/notification.txt
+
+identity_providers:
+  oidc:
+    hmac_secret: 'test_hmac_secret_for_testing_only_must_be_32chars'
+    jwks:
+      - key_id: 'test-key'
+        algorithm: RS256
+        use: sig
+        key: |
+          -----BEGIN RSA PRIVATE KEY-----
+          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
+          -----END RSA PRIVATE KEY-----
+    clients:
+      - client_id: 'kvdb-test'
+        client_name: 'KVDB Test Client'
+        client_secret: '$pbkdf2-sha512$310000$n6./cQHSeWZtFjVQy9tP5g$zwV.z3tvrsdDN0LCC4AjDQEdC.m9T.qFil5r/vfOVmKcEAwBYOI6UWO6rrEAwWrX/KslDEsgZkc0N0iyCSmoZw'
+        public: false
+        authorization_policy: one_factor
+        redirect_uris:
+          - 'http://127.0.0.1:8080/oidc/callback'
+        scopes:
+          - openid
+          - profile
+          - email
+        grant_types:
+          - authorization_code
+        response_types:
+          - code
+        response_modes:
+          - query
+        userinfo_signed_response_alg: none

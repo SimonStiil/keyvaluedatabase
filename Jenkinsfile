@@ -70,6 +70,14 @@ def template = '''
           - TEMPORARY_FAKE_PASSWORD
         ports:
           - containerPort: 6379
+      - name: authelia
+        image: authelia/authelia:4.38 # renovate
+        command:
+        - /bin/sh
+        - -c
+        - "while [ ! -f /config/configuration.yml ]; do sleep 1; done; exec authelia --config /config/configuration.yml"
+        ports:
+        - containerPort: 9091
       restartPolicy: Never
       volumes:
       - name: docker-secret
@@ -103,6 +111,16 @@ podTemplate(yaml: template) {
       properties = readProperties file: 'package.env'
     }
 
+    container('authelia') {
+      stage('Setup Authelia') {
+        sh '''
+          mkdir -p /config
+          cp testdata/authelia/configuration.yml /config/configuration.yml
+          cp testdata/authelia/users_database.yml /config/users_database.yml
+        '''
+      }
+    }
+
     container('golang') {
       stage('Install tools') {
         currentBuild.description = sh(returnStdout: true, script: 'echo $HOST_NAME').trim()
@@ -116,8 +134,9 @@ podTemplate(yaml: template) {
       stage('UnitTests') {
         currentBuild.description = sh(returnStdout: true, script: 'echo $HOST_NAME').trim()
         try{
-          withEnv(['CGO_ENABLED=0', 'KVDB_DATABASETYPE=postgres', "KVDB_MYSQL_PASSWORD=${testpassword}", "KVDB_POSTGRES_PASSWORD=${testpassword}", "KVDB_REDIS_PASSWORD=${testpassword}"]) {
+          withEnv(['CGO_ENABLED=0', 'KVDB_DATABASETYPE=postgres', "KVDB_MYSQL_PASSWORD=${testpassword}", "KVDB_POSTGRES_PASSWORD=${testpassword}", "KVDB_REDIS_PASSWORD=${testpassword}", 'TEST_AUTHelia=true']) {
             sh '''
+              timeout 120 sh -c 'until wget -qO/dev/null http://127.0.0.1:19091/.well-known/openid-configuration 2>/dev/null; do sleep 2; done'
               go test . -v -tags="unit integration" -covermode=atomic -coverprofile=coverage.out 2>&1 > tests.out
               go-junit-report -in tests.out -iocopy -out report.xml -set-exit-code
               go tool cover -func coverage.out

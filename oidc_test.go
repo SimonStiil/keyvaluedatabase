@@ -1,17 +1,15 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
-	testcontainers "github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 func Test_OIDC_Config_Defaults(t *testing.T) {
@@ -213,50 +211,29 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// Test_OIDC_With_Authelia spins up an Authelia container and tests full OIDC flow
-// This test is skipped if TEST_AUTHelia is not set to true
+// Test_OIDC_With_Authelia tests the full OIDC provider integration against a live
+// Authelia instance. The container is started by run-tests.sh on port 19091 using
+// testdata/authelia/configuration.yml. Set TEST_AUTHelia=true to enable.
+//
+// Test user: testuser / testpassword
+// Client ID: kvdb-test  Client secret: kvdb-test-secret
+const autheliaProviderURL = "http://127.0.0.1:19091"
+
 func Test_OIDC_With_Authelia(t *testing.T) {
 	if os.Getenv("TEST_AUTHelia") != "true" {
 		t.Skip("Skipping Authelia integration test (set TEST_AUTHelia=true to enable)")
 	}
 
-	// Spin up Authelia container
-	ctx := context.Background()
-	req := testcontainers.ContainerRequest{
-		Image:        "authelia/authelia",
-		ExposedPorts: []string{"9096/tcp"},
-		WaitingFor:   wait.ForListeningPort("9096"),
-	}
-
-	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: req,
-		Started:          true,
-	})
-	if err != nil {
-		t.Skipf("Could not start Authelia container: %v", err)
-		return
-	}
-	defer func() { _ = container.Terminate(ctx) }()
-
-	mappedPort, err := container.MappedPort(ctx, "9096")
-	if err != nil {
-		t.Fatalf("Could not get mapped port: %v", err)
-	}
-
-	providerURL := fmt.Sprintf("http://127.0.0.1:%v/.well-known/openid-configuration", mappedPort.Port())
-
-	// Configure OIDC
 	config := ConfigType{}
 	ConfigRead("example-config", &config)
 	config.OIDC.Enabled = true
-	config.OIDC.ProviderURL = providerURL
-	config.OIDC.ClientID = "test-client"
-	config.OIDC.ClientSecret = "test-secret"
+	config.OIDC.ProviderURL = autheliaProviderURL
+	config.OIDC.ClientID = "kvdb-test"
+	config.OIDC.ClientSecret = "kvdb-test-secret"
 	config.OIDC.RedirectURL = "http://127.0.0.1:8080/oidc/callback"
 	config.OIDC.Scopes = []string{"openid", "profile", "email"}
 	config.OIDC.TokenTTL = 60
 
-	// Initialize provider
 	provider, err := InitOIDCProvider(config.OIDC)
 	if err != nil {
 		t.Fatalf("Failed to initialize OIDC provider: %v", err)
@@ -268,7 +245,7 @@ func Test_OIDC_With_Authelia(t *testing.T) {
 		}
 	})
 
-	t.Run("Login returns authorization URL", func(t *testing.T) {
+	t.Run("Authorization URL has correct client_id and response_type", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		r, _ := http.NewRequest(http.MethodGet, "/oidc/login", nil)
 		provider.OIDCLogin(w, r)
@@ -278,7 +255,55 @@ func Test_OIDC_With_Authelia(t *testing.T) {
 		}
 		location := w.Header().Get("Location")
 		if location == "" {
-			t.Error("Login should redirect to authorization URL")
+			t.Fatal("Login did not set a Location header")
+		}
+		if !strings.Contains(location, "client_id=kvdb-test") {
+			t.Errorf("Authorization URL missing client_id, got: %v", location)
+		}
+		if !strings.Contains(location, "response_type=code") {
+			t.Errorf("Authorization URL missing response_type=code, got: %v", location)
+		}
+	})
+
+	t.Run("OAuth2 endpoints point to Authelia", func(t *testing.T) {
+		endpoint := provider.OAuth2Config.Endpoint
+		if !strings.HasPrefix(endpoint.AuthURL, autheliaProviderURL) {
+			t.Errorf("Auth URL should start with %v, got: %v", autheliaProviderURL, endpoint.AuthURL)
+		}
+		if !strings.HasPrefix(endpoint.TokenURL, autheliaProviderURL) {
+			t.Errorf("Token URL should start with %v, got: %v", autheliaProviderURL, endpoint.TokenURL)
+		}
+	})
+
+	t.Run("App initializes with OIDC provider", func(t *testing.T) {
+		App = new(Application)
+		stub := &APIStub{}
+		App.Auth = Auth{}
+		App.Auth.Init(config)
+		App.DB = &YamlDatabase{DatabaseName: "test_oidc_authelia.db.yaml"}
+		App.DB.Init()
+		App.Count = &Counter{}
+		App.Count.Init(App.DB)
+		defer func() {
+			App.DB.Close()
+			os.Remove("test_oidc_authelia.db.yaml")
+		}()
+		App.APIEndpoints = []API{stub}
+
+		if App.Auth.OIDCProvider == nil {
+			t.Error("Auth.OIDCProvider should be initialized when OIDC is enabled and provider is reachable")
+		}
+
+		// Request without a session cookie should be rejected when basic auth is also disabled
+		config.OIDC.DisableBasicAuth = true
+		App.Auth.Init(config)
+		request, _ := http.NewRequest(http.MethodGet,
+			fmt.Sprintf("/%v/%v/notUsed", stub.APIPrefix(), "world"), nil)
+		request.RemoteAddr = "127.0.0.1:434"
+		response := httptest.NewRecorder()
+		App.RootControllerV1(response, request)
+		if response.Code != http.StatusUnauthorized {
+			t.Errorf("Request without OIDC session should be unauthorized: got %v", response.Code)
 		}
 	})
 }
